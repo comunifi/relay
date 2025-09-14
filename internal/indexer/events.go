@@ -94,11 +94,6 @@ func (i *Indexer) ListenToLogs(ev *relay.Event, quitAck chan error) error {
 
 		l.Hash = l.GenerateUniqueHash()
 
-		err = i.db.LogDB.AddLogs([]*relay.Log{l})
-		if err != nil {
-			return err
-		}
-
 		ev, err := eth.CreateTxLogEvent(l, i.secretKey)
 		if err != nil {
 			fmt.Println("Error creating tx log event:", err)
@@ -116,14 +111,6 @@ func (i *Indexer) ListenToLogs(ev *relay.Event, quitAck chan error) error {
 		}
 
 		i.pools.BroadcastMessage(relay.WSMessageTypeUpdate, l)
-
-		// TODO: cleanup old sending logs which have no data
-
-		// cleanup old pending and sending transfers
-		err = i.db.LogDB.RemoveOldInProgressLogs()
-		if err != nil {
-			return err
-		}
 	}
 
 	return nil
