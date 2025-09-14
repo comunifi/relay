@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/citizenwallet/engine/pkg/common"
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/pkg/common"
+	"github.com/citizenapp2/relay/pkg/relay"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -68,7 +68,7 @@ func (db *PushTokenDB) CreatePushTableIndexes() error {
 }
 
 // AddToken adds a token to the db
-func (db *PushTokenDB) AddToken(p *engine.PushToken) error {
+func (db *PushTokenDB) AddToken(p *relay.PushToken) error {
 	now := time.Now().UTC()
 
 	_, err := db.db.Exec(db.ctx, fmt.Sprintf(`
@@ -85,8 +85,8 @@ func (db *PushTokenDB) AddToken(p *engine.PushToken) error {
 }
 
 // GetAccountTokens returns the push tokens for a given account
-func (db *PushTokenDB) GetAccountTokens(account string) ([]*engine.PushToken, error) {
-	pt := []*engine.PushToken{}
+func (db *PushTokenDB) GetAccountTokens(account string) ([]*relay.PushToken, error) {
+	pt := []*relay.PushToken{}
 
 	rows, err := db.rdb.Query(db.ctx, fmt.Sprintf(`
 		SELECT token, account
@@ -103,7 +103,7 @@ func (db *PushTokenDB) GetAccountTokens(account string) ([]*engine.PushToken, er
 	defer rows.Close()
 
 	for rows.Next() {
-		var p engine.PushToken
+		var p relay.PushToken
 
 		err := rows.Scan(&p.Token, &p.Account)
 		if err != nil {

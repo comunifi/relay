@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/pkg/relay"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
@@ -91,7 +91,7 @@ func StreamedBody(w http.ResponseWriter, body string) error {
 }
 
 func JSONRPCBody(w http.ResponseWriter, id any, body any, meta any, err error) error {
-	b, err := json.Marshal(&engine.JsonRPCResponse{
+	b, err := json.Marshal(&relay.JsonRPCResponse{
 		Version: "2.0",
 		ID:      id,
 		Result:  body,
@@ -117,10 +117,10 @@ func JSONRPCMultiBody(w http.ResponseWriter, ids []any, bodies []any, meta any, 
 		return errors.New("ids and errors must have the same length")
 	}
 
-	responses := make([]engine.JsonRPCResponse, len(ids))
+	responses := make([]relay.JsonRPCResponse, len(ids))
 
 	for i, id := range ids {
-		responses[i] = engine.JsonRPCResponse{
+		responses[i] = relay.JsonRPCResponse{
 			Version: "2.0",
 			ID:      id,
 			Result:  bodies[i],
@@ -139,19 +139,19 @@ func JSONRPCMultiBody(w http.ResponseWriter, ids []any, bodies []any, meta any, 
 	return nil
 }
 
-func parseRPCError(err error) *engine.JSONRPCError {
+func parseRPCError(err error) *relay.JSONRPCError {
 	if err == nil {
 		return nil
 	}
 
 	if rpcErr, ok := err.(rpc.Error); ok {
-		return &engine.JSONRPCError{
+		return &relay.JSONRPCError{
 			Code:    rpcErr.ErrorCode(),
 			Message: rpcErr.Error(),
 		}
 	}
 
-	return &engine.JSONRPCError{
+	return &relay.JSONRPCError{
 		Code:    -32000, // Generic server error code
 		Message: err.Error(),
 	}

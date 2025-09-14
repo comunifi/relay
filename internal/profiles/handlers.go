@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/citizenwallet/engine/internal/bucket"
-	com "github.com/citizenwallet/engine/pkg/common"
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/internal/bucket"
+	com "github.com/citizenapp2/relay/pkg/common"
+	"github.com/citizenapp2/relay/pkg/relay"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/profile"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -16,10 +16,10 @@ import (
 
 type Service struct {
 	b   *bucket.Bucket
-	evm engine.EVMRequester
+	evm relay.EVMRequester
 }
 
-func NewService(b *bucket.Bucket, evm engine.EVMRequester) *Service {
+func NewService(b *bucket.Bucket, evm relay.EVMRequester) *Service {
 	return &Service{
 		b:   b,
 		evm: evm,
@@ -76,7 +76,7 @@ func (s *Service) PinProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var profile engine.Profile
+	var profile relay.Profile
 	err = json.NewDecoder(r.Body).Decode(&profile)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -196,7 +196,7 @@ func (s *Service) PinMultiPartProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var profile engine.Profile
+	var profile relay.Profile
 	if err := json.Unmarshal([]byte(strbody), &profile); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return

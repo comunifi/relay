@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/citizenwallet/engine/internal/db"
-	comm "github.com/citizenwallet/engine/pkg/common"
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/internal/db"
+	comm "github.com/citizenapp2/relay/pkg/common"
+	"github.com/citizenapp2/relay/pkg/relay"
 	pay "github.com/citizenwallet/smartcontracts/pkg/contracts/paymaster"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -28,13 +28,13 @@ var (
 )
 
 type Service struct {
-	evm engine.EVMRequester
+	evm relay.EVMRequester
 
 	db *db.DB
 }
 
 // NewService
-func NewService(evm engine.EVMRequester, db *db.DB) *Service {
+func NewService(evm relay.EVMRequester, db *db.DB) *Service {
 	return &Service{
 		evm,
 		db,
@@ -83,7 +83,7 @@ func (s *Service) Sponsor(r *http.Request) (any, error) {
 		return nil, err
 	}
 
-	var userop engine.UserOp
+	var userop relay.UserOp
 	var epAddr string
 	var pt paymasterType
 
@@ -167,7 +167,7 @@ func (s *Service) Sponsor(r *http.Request) (any, error) {
 
 	// verify the calldata, it should only be allowed to contain the function signatures we allow
 	funcSig := userop.CallData[:4]
-	if !bytes.Equal(funcSig, engine.FuncSigSingle) && !bytes.Equal(funcSig, engine.FuncSigBatch) && !bytes.Equal(funcSig, engine.FuncSigSafeExecFromModule) {
+	if !bytes.Equal(funcSig, relay.FuncSigSingle) && !bytes.Equal(funcSig, relay.FuncSigBatch) && !bytes.Equal(funcSig, relay.FuncSigSafeExecFromModule) {
 		return nil, errors.New("error invalid function signature. supported signatures: execute, executeBatch, execTransactionFromModule")
 	}
 
@@ -331,7 +331,7 @@ func (s *Service) OOSponsor(r *http.Request) (any, error) {
 		return nil, err
 	}
 
-	var userop engine.UserOp
+	var userop relay.UserOp
 	var epAddr string
 	var pt paymasterType
 	var amount int
@@ -398,7 +398,7 @@ func (s *Service) OOSponsor(r *http.Request) (any, error) {
 
 	// verify the calldata, it should only be allowed to contain the function signatures we allow
 	funcSig := userop.CallData[:4]
-	if !bytes.Equal(funcSig, engine.FuncSigSingle) && !bytes.Equal(funcSig, engine.FuncSigBatch) && !bytes.Equal(funcSig, engine.FuncSigSafeExecFromModule) {
+	if !bytes.Equal(funcSig, relay.FuncSigSingle) && !bytes.Equal(funcSig, relay.FuncSigBatch) && !bytes.Equal(funcSig, relay.FuncSigSafeExecFromModule) {
 		return nil, errors.New("error invalid function signature. supported signatures: execute, executeBatch, execTransactionFromModule")
 
 	}
@@ -501,7 +501,7 @@ func (s *Service) OOSponsor(r *http.Request) (any, error) {
 		return nil, errors.New("error invalid private key")
 	}
 
-	userops := []*engine.UserOp{}
+	userops := []*relay.UserOp{}
 
 	// generate an amount of nonces equivalent to the amount requested
 	for i := 0; i < amount; i++ {

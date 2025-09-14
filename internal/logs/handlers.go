@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/citizenwallet/engine/internal/db"
-	com "github.com/citizenwallet/engine/pkg/common"
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/internal/db"
+	com "github.com/citizenapp2/relay/pkg/common"
+	"github.com/citizenapp2/relay/pkg/relay"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -17,10 +17,10 @@ type Service struct {
 	chainID *big.Int
 	db      *db.DB
 
-	evm engine.EVMRequester
+	evm relay.EVMRequester
 }
 
-func NewService(chainID *big.Int, db *db.DB, evm engine.EVMRequester) *Service {
+func NewService(chainID *big.Int, db *db.DB, evm relay.EVMRequester) *Service {
 	return &Service{
 		chainID: chainID,
 		db:      db,
@@ -209,9 +209,9 @@ func (s *Service) Get(w http.ResponseWriter, r *http.Request) {
 		offset = 0
 	}
 
-	dataFilters := engine.ParseJSONBFilters(r.URL.Query(), "data")
+	dataFilters := relay.ParseJSONBFilters(r.URL.Query(), "data")
 
-	dataFilters2 := engine.ParseJSONBFilters(r.URL.Query(), "data2")
+	dataFilters2 := relay.ParseJSONBFilters(r.URL.Query(), "data2")
 
 	// get logs from db
 	logs, err := s.db.LogDB.GetPaginatedLogs(com.ChecksumAddress(contractAddr), topic, maxDate, dataFilters, dataFilters2, limit, offset) // TODO: add topics
@@ -267,9 +267,9 @@ func (s *Service) GetNew(w http.ResponseWriter, r *http.Request) {
 		offset = 0
 	}
 
-	dataFilters := engine.ParseJSONBFilters(r.URL.Query(), "data")
+	dataFilters := relay.ParseJSONBFilters(r.URL.Query(), "data")
 
-	dataFilters2 := engine.ParseJSONBFilters(r.URL.Query(), "data2")
+	dataFilters2 := relay.ParseJSONBFilters(r.URL.Query(), "data2")
 
 	// get logs from db
 	logs, err := s.db.LogDB.GetNewLogs(com.ChecksumAddress(contractAddr), topic, fromDate, dataFilters, dataFilters2, limit, offset)

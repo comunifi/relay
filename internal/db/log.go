@@ -7,8 +7,8 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/citizenwallet/engine/pkg/common"
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/pkg/common"
+	"github.com/citizenapp2/relay/pkg/relay"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -139,7 +139,7 @@ func (db *LogDB) CreateLogTableIndexes() error {
 }
 
 // AddLog adds a log dest the db
-func (db *LogDB) AddLog(lg *engine.Log) error {
+func (db *LogDB) AddLog(lg *relay.Log) error {
 
 	// start transaction
 	tx, err := db.db.BeginTx(db.ctx, pgx.TxOptions{
@@ -190,7 +190,7 @@ func (db *LogDB) AddLog(lg *engine.Log) error {
 }
 
 // AddLogs adds a list of logs dest the db
-func (db *LogDB) AddLogs(lg []*engine.Log) error {
+func (db *LogDB) AddLogs(lg []*relay.Log) error {
 	// start transaction
 	tx, err := db.db.BeginTx(db.ctx, pgx.TxOptions{
 		IsoLevel:       pgx.ReadCommitted,
@@ -282,8 +282,8 @@ func (db *LogDB) RemoveOldInProgressLogs() error {
 }
 
 // GetLog returns the log for a given hash
-func (db *LogDB) GetLog(hash string) (*engine.Log, error) {
-	var log engine.Log
+func (db *LogDB) GetLog(hash string) (*relay.Log, error) {
+	var log relay.Log
 	var value string
 	var extraData *json.RawMessage
 
@@ -307,8 +307,8 @@ func (db *LogDB) GetLog(hash string) (*engine.Log, error) {
 }
 
 // GetAllPaginatedLogs returns the logs paginated
-func (db *LogDB) GetAllPaginatedLogs(contract string, topic string, maxDate time.Time, limit, offset int) ([]*engine.Log, error) {
-	logs := []*engine.Log{}
+func (db *LogDB) GetAllPaginatedLogs(contract string, topic string, maxDate time.Time, limit, offset int) ([]*relay.Log, error) {
+	logs := []*relay.Log{}
 
 	query := fmt.Sprintf(`
 	SELECT l.hash, l.tx_hash, l.created_at, l.updated_at, l.nonce, l.sender, l.dest, l.value, l.data, l.status, d.data as extra_data
@@ -332,7 +332,7 @@ func (db *LogDB) GetAllPaginatedLogs(contract string, topic string, maxDate time
 	defer rows.Close()
 
 	for rows.Next() {
-		var log engine.Log
+		var log relay.Log
 		var value string
 		var extraData *json.RawMessage
 
@@ -352,8 +352,8 @@ func (db *LogDB) GetAllPaginatedLogs(contract string, topic string, maxDate time
 }
 
 // GetPaginatedLogs returns the logs for a given from_addr or to_addr paginated
-func (db *LogDB) GetPaginatedLogs(contract string, topic string, maxDate time.Time, dataFilters, dataFilters2 map[string]any, limit, offset int) ([]*engine.Log, error) {
-	logs := []*engine.Log{}
+func (db *LogDB) GetPaginatedLogs(contract string, topic string, maxDate time.Time, dataFilters, dataFilters2 map[string]any, limit, offset int) ([]*relay.Log, error) {
+	logs := []*relay.Log{}
 
 	query := fmt.Sprintf(`
 		SELECT l.hash, l.tx_hash, l.created_at, l.updated_at, l.nonce, l.sender, l.dest, l.value, l.data, l.status, d.data as extra_data
@@ -370,7 +370,7 @@ func (db *LogDB) GetPaginatedLogs(contract string, topic string, maxDate time.Ti
 		`
 
 	if len(dataFilters) > 0 {
-		topicQuery, topicArgs := engine.GenerateJSONBQuery("l.", len(args)+1, dataFilters)
+		topicQuery, topicArgs := relay.GenerateJSONBQuery("l.", len(args)+1, dataFilters)
 
 		query += `AND `
 		query += topicQuery
@@ -389,7 +389,7 @@ func (db *LogDB) GetPaginatedLogs(contract string, topic string, maxDate time.Ti
 
 			args = append(args, contract, topic, maxDate)
 
-			topicQuery2, topicArgs2 := engine.GenerateJSONBQuery("l.", len(args)+1, dataFilters2)
+			topicQuery2, topicArgs2 := relay.GenerateJSONBQuery("l.", len(args)+1, dataFilters2)
 
 			query += `AND `
 			query += topicQuery2
@@ -419,7 +419,7 @@ func (db *LogDB) GetPaginatedLogs(contract string, topic string, maxDate time.Ti
 	defer rows.Close()
 
 	for rows.Next() {
-		var log engine.Log
+		var log relay.Log
 		var value string
 		var extraData *json.RawMessage
 
@@ -439,8 +439,8 @@ func (db *LogDB) GetPaginatedLogs(contract string, topic string, maxDate time.Ti
 }
 
 // GetAllNewLogs returns the logs for a given from_addr or to_addr from a given date
-func (db *LogDB) GetAllNewLogs(contract string, topic string, fromDate time.Time, limit, offset int) ([]*engine.Log, error) {
-	logs := []*engine.Log{}
+func (db *LogDB) GetAllNewLogs(contract string, topic string, fromDate time.Time, limit, offset int) ([]*relay.Log, error) {
+	logs := []*relay.Log{}
 
 	query := fmt.Sprintf(`
 		SELECT l.hash, l.tx_hash, l.created_at, l.nonce, l.sender, l.dest, l.value, l.data, l.status, d.data as extra_data
@@ -471,7 +471,7 @@ func (db *LogDB) GetAllNewLogs(contract string, topic string, fromDate time.Time
 	defer rows.Close()
 
 	for rows.Next() {
-		var log engine.Log
+		var log relay.Log
 		var value string
 		var extraData *json.RawMessage
 
@@ -491,8 +491,8 @@ func (db *LogDB) GetAllNewLogs(contract string, topic string, fromDate time.Time
 }
 
 // GetNewLogs returns the logs for a given from_addr or to_addr from a given date
-func (db *LogDB) GetNewLogs(contract string, topic string, fromDate time.Time, dataFilters, dataFilters2 map[string]any, limit, offset int) ([]*engine.Log, error) {
-	logs := []*engine.Log{}
+func (db *LogDB) GetNewLogs(contract string, topic string, fromDate time.Time, dataFilters, dataFilters2 map[string]any, limit, offset int) ([]*relay.Log, error) {
+	logs := []*relay.Log{}
 
 	query := fmt.Sprintf(`
 		SELECT l.hash, l.tx_hash, l.created_at, l.nonce, l.sender, l.dest, l.value, l.data, l.status, d.data as extra_data
@@ -508,7 +508,7 @@ func (db *LogDB) GetNewLogs(contract string, topic string, fromDate time.Time, d
 		LIMIT $3 OFFSET $4
 		`
 	if len(dataFilters) > 0 {
-		topicQuery, topicArgs := engine.GenerateJSONBQuery("l.", len(args)+1, dataFilters)
+		topicQuery, topicArgs := relay.GenerateJSONBQuery("l.", len(args)+1, dataFilters)
 
 		query += `AND `
 		query += topicQuery
@@ -527,7 +527,7 @@ func (db *LogDB) GetNewLogs(contract string, topic string, fromDate time.Time, d
 
 			args = append(args, contract, topic, fromDate)
 
-			topicQuery2, topicArgs2 := engine.GenerateJSONBQuery("l.", len(args)+1, dataFilters2)
+			topicQuery2, topicArgs2 := relay.GenerateJSONBQuery("l.", len(args)+1, dataFilters2)
 
 			query += `AND `
 			query += topicQuery2
@@ -557,7 +557,7 @@ func (db *LogDB) GetNewLogs(contract string, topic string, fromDate time.Time, d
 	defer rows.Close()
 
 	for rows.Next() {
-		var log engine.Log
+		var log relay.Log
 		var value string
 		var extraData *json.RawMessage
 
@@ -577,7 +577,7 @@ func (db *LogDB) GetNewLogs(contract string, topic string, fromDate time.Time, d
 }
 
 // UpdateLogsWithDB returns the logs with data updated from the db
-func (db *LogDB) UpdateLogsWithDB(txs []*engine.Log) ([]*engine.Log, error) {
+func (db *LogDB) UpdateLogsWithDB(txs []*relay.Log) ([]*relay.Log, error) {
 	if len(txs) == 0 {
 		return txs, nil
 	}
@@ -613,13 +613,13 @@ func (db *LogDB) UpdateLogsWithDB(txs []*engine.Log) ([]*engine.Log, error) {
 	}
 	defer rows.Close()
 
-	mtxs := map[string]*engine.Log{}
+	mtxs := map[string]*relay.Log{}
 	for _, lg := range txs {
 		mtxs[lg.Hash] = lg
 	}
 
 	for rows.Next() {
-		var log engine.Log
+		var log relay.Log
 		var value string
 		var extraData *json.RawMessage
 

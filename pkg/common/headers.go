@@ -3,11 +3,11 @@ package common
 import (
 	"context"
 
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/pkg/relay"
 )
 
 // GetContextAddress returns the indexer.ContextKeyAddress from the context
 func GetContextAddress(ctx context.Context) (string, bool) {
-	addr, ok := ctx.Value(engine.ContextKeyAddress).(string)
+	addr, ok := ctx.Value(relay.ContextKeyAddress).(string)
 	return addr, ok
 }

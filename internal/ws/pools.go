@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/pkg/relay"
 )
 
 type ConnectionPools struct {
@@ -34,7 +34,7 @@ func (p *ConnectionPools) Connect(w http.ResponseWriter, r *http.Request, topic 
 }
 
 // BroadcastMessage broadcasts a message to all clients in a topic
-func (p *ConnectionPools) BroadcastMessage(t engine.WSMessageType, m engine.WSMessageCreator) {
+func (p *ConnectionPools) BroadcastMessage(t relay.WSMessageType, m relay.WSMessageCreator) {
 	wsm := m.ToWSMessage(t)
 	if wsm == nil {
 		return

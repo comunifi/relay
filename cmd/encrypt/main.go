@@ -4,7 +4,7 @@ import (
 	"flag"
 	"log"
 
-	"github.com/citizenwallet/engine/pkg/common"
+	"github.com/citizenapp2/relay/pkg/common"
 )
 
 func main() {

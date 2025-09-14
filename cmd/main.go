@@ -6,19 +6,19 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/citizenwallet/engine/internal/api"
-	"github.com/citizenwallet/engine/internal/bucket"
-	"github.com/citizenwallet/engine/internal/config"
-	"github.com/citizenwallet/engine/internal/db"
-	"github.com/citizenwallet/engine/internal/ethrequest"
-	"github.com/citizenwallet/engine/internal/indexer"
-	"github.com/citizenwallet/engine/internal/queue"
-	"github.com/citizenwallet/engine/internal/webhook"
-	"github.com/citizenwallet/engine/internal/ws"
+	"github.com/citizenapp2/relay/internal/api"
+	"github.com/citizenapp2/relay/internal/bucket"
+	"github.com/citizenapp2/relay/internal/config"
+	"github.com/citizenapp2/relay/internal/db"
+	"github.com/citizenapp2/relay/internal/ethrequest"
+	"github.com/citizenapp2/relay/internal/indexer"
+	"github.com/citizenapp2/relay/internal/queue"
+	"github.com/citizenapp2/relay/internal/webhook"
+	"github.com/citizenapp2/relay/internal/ws"
 )
 
 func main() {
-	log.Default().Println("starting engine...")
+	log.Default().Println("starting relay...")
 
 	////////////////////
 	// flags

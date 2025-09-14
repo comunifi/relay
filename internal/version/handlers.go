@@ -3,8 +3,8 @@ package version
 import (
 	"net/http"
 
-	"github.com/citizenwallet/engine/pkg/common"
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/pkg/common"
+	"github.com/citizenapp2/relay/pkg/relay"
 )
 
 type Service struct{}
@@ -19,7 +19,7 @@ type response struct {
 
 // Current returns the current version of the API
 func (s *Service) Current(w http.ResponseWriter, r *http.Request) {
-	err := common.Body(w, &response{Version: engine.Version}, nil)
+	err := common.Body(w, &response{Version: relay.Version}, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}

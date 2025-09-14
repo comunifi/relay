@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/pkg/relay"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -76,8 +76,8 @@ func (db *EventDB) EventExists(contract string) (bool, error) {
 }
 
 // GetEvent gets an event from the db by contract and signature
-func (db *EventDB) GetEvent(contract string, signature string) (*engine.Event, error) {
-	var event engine.Event
+func (db *EventDB) GetEvent(contract string, signature string) (*relay.Event, error) {
+	var event relay.Event
 	err := db.rdb.QueryRow(db.ctx, fmt.Sprintf(`
 	SELECT contract, event_signature, name, created_at, updated_at
 	FROM t_events_%s
@@ -91,7 +91,7 @@ func (db *EventDB) GetEvent(contract string, signature string) (*engine.Event, e
 }
 
 // GetEvents gets all events from the db
-func (db *EventDB) GetEvents() ([]*engine.Event, error) {
+func (db *EventDB) GetEvents() ([]*relay.Event, error) {
 	rows, err := db.rdb.Query(db.ctx, fmt.Sprintf(`
     SELECT contract, event_signature, name, created_at, updated_at
     FROM t_events_%s
@@ -102,9 +102,9 @@ func (db *EventDB) GetEvents() ([]*engine.Event, error) {
 	}
 	defer rows.Close()
 
-	events := []*engine.Event{}
+	events := []*relay.Event{}
 	for rows.Next() {
-		var event engine.Event
+		var event relay.Event
 		err = rows.Scan(&event.Contract, &event.EventSignature, &event.Name, &event.CreatedAt, &event.UpdatedAt)
 		if err != nil {
 			return nil, err
@@ -117,7 +117,7 @@ func (db *EventDB) GetEvents() ([]*engine.Event, error) {
 }
 
 // GetOutdatedEvents gets all queued events from the db sorted by created_at
-func (db *EventDB) GetOutdatedEvents(currentBlk int64) ([]*engine.Event, error) {
+func (db *EventDB) GetOutdatedEvents(currentBlk int64) ([]*relay.Event, error) {
 	rows, err := db.rdb.Query(db.ctx, fmt.Sprintf(`
     SELECT contract, event_signature, name, created_at, updated_at
     FROM t_events_%s
@@ -129,9 +129,9 @@ func (db *EventDB) GetOutdatedEvents(currentBlk int64) ([]*engine.Event, error) 
 	}
 	defer rows.Close()
 
-	events := []*engine.Event{}
+	events := []*relay.Event{}
 	for rows.Next() {
-		var event engine.Event
+		var event relay.Event
 		err = rows.Scan(&event.Contract, &event.EventSignature, &event.Name, &event.CreatedAt, &event.UpdatedAt)
 		if err != nil {
 			return nil, err

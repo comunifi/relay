@@ -1,4 +1,4 @@
-package engine
+package relay
 
 type Community struct {
 	Name         string `json:"name"`

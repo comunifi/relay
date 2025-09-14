@@ -6,7 +6,7 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/pkg/relay"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -34,11 +34,11 @@ func ParseDestinationFromCallData(calldata []byte) (common.Address, error) {
 	args := calldata[4:]
 
 	switch string(funcSelector) {
-	case string(engine.FuncSigSafeExecFromModule):
+	case string(relay.FuncSigSafeExecFromModule):
 		dest = common.BytesToAddress(args[32-20 : 32])
-	case string(engine.FuncSigSingle):
+	case string(relay.FuncSigSingle):
 		dest = common.BytesToAddress(args[32-20 : 32])
-	case string(engine.FuncSigBatch):
+	case string(relay.FuncSigBatch):
 		return common.Address{}, ErrInvalidCalldata // TODO: implement batch execute
 	default:
 		return common.Address{}, ErrInvalidCalldata
@@ -53,14 +53,14 @@ func ParseDestinationFromCallData(calldata []byte) (common.Address, error) {
 }
 
 // ParseERC20Transfer parses the calldata of an ERC20 transfer from a smart contract Execute function
-func ParseERC20Transfer(calldata []byte, evm engine.EVMRequester) (common.Address, common.Address, common.Address, *big.Int, error) {
+func ParseERC20Transfer(calldata []byte, evm relay.EVMRequester) (common.Address, common.Address, common.Address, *big.Int, error) {
 	if len(calldata) < 228 {
 		return common.Address{}, common.Address{}, common.Address{}, nil, ErrInvalidCalldata
 	}
 
 	// The function selector is the first 4 bytes of the calldata
 	funcSelector := calldata[:4]
-	if !bytes.Equal(funcSelector, engine.FuncSigSingle) { // TODO: implement batch execute
+	if !bytes.Equal(funcSelector, relay.FuncSigSingle) { // TODO: implement batch execute
 		return common.Address{}, common.Address{}, common.Address{}, nil, ErrInvalidCalldata
 	}
 

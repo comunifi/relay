@@ -4,21 +4,21 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/citizenwallet/engine/internal/db"
-	com "github.com/citizenwallet/engine/pkg/common"
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/internal/db"
+	com "github.com/citizenapp2/relay/pkg/common"
+	"github.com/citizenapp2/relay/pkg/relay"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/go-chi/chi/v5"
 )
 
 type Service struct {
-	evm engine.EVMRequester
+	evm relay.EVMRequester
 
 	db *db.DB
 }
 
-func NewService(evm engine.EVMRequester, db *db.DB) *Service {
+func NewService(evm relay.EVMRequester, db *db.DB) *Service {
 	return &Service{
 		evm: evm,
 		db:  db,

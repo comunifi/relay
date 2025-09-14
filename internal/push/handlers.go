@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/citizenwallet/engine/internal/db"
-	com "github.com/citizenwallet/engine/pkg/common"
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/internal/db"
+	com "github.com/citizenapp2/relay/pkg/common"
+	"github.com/citizenapp2/relay/pkg/relay"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/go-chi/chi/v5"
 )
@@ -44,7 +44,7 @@ func (s *Service) AddToken(w http.ResponseWriter, r *http.Request) {
 	// parse contract address from url params
 	contractAddr := chi.URLParam(r, "contract_address")
 
-	var pt engine.PushToken
+	var pt relay.PushToken
 	err := json.NewDecoder(r.Body).Decode(&pt)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)

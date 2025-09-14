@@ -9,10 +9,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/citizenwallet/engine/internal/db"
-	"github.com/citizenwallet/engine/internal/queue"
-	comm "github.com/citizenwallet/engine/pkg/common"
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/internal/db"
+	"github.com/citizenapp2/relay/internal/queue"
+	comm "github.com/citizenapp2/relay/pkg/common"
+	"github.com/citizenapp2/relay/pkg/relay"
 	pay "github.com/citizenwallet/smartcontracts/pkg/contracts/paymaster"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -22,14 +22,14 @@ import (
 )
 
 type Service struct {
-	evm     engine.EVMRequester
+	evm     relay.EVMRequester
 	db      *db.DB
 	useropq *queue.Service
 	chainId *big.Int
 }
 
 // NewService
-func NewService(evm engine.EVMRequester, db *db.DB, useropq *queue.Service, chid *big.Int) *Service {
+func NewService(evm relay.EVMRequester, db *db.DB, useropq *queue.Service, chid *big.Int) *Service {
 	return &Service{
 		evm,
 		db,
@@ -69,7 +69,7 @@ func (s *Service) Send(r *http.Request) (any, error) {
 		return nil, err
 	}
 
-	var userop engine.UserOp
+	var userop relay.UserOp
 	var epAddr string
 	var data *json.RawMessage
 	var xdata *json.RawMessage
@@ -212,7 +212,7 @@ func (s *Service) Send(r *http.Request) (any, error) {
 	entryPoint := common.HexToAddress(epAddr)
 
 	// Create a new message
-	message := engine.NewTxMessage(addr, entryPoint, s.chainId, userop, data, xdata)
+	message := relay.NewTxMessage(addr, entryPoint, s.chainId, userop, data, xdata)
 
 	// Enqueue the message
 	s.useropq.Enqueue(*message)

@@ -1,9 +1,9 @@
-module github.com/citizenwallet/engine
+module github.com/citizenapp2/relay
 
 go 1.24.6
 
 require (
-	github.com/citizenwallet/nostr-eth v0.1.7
+	github.com/citizenapp2/nostr-eth v0.0.4
 	github.com/citizenwallet/smartcontracts v0.0.110
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0
 	github.com/ethereum/go-ethereum v1.14.11

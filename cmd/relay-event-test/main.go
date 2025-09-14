@@ -8,16 +8,16 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/citizenwallet/engine/internal/config"
-	"github.com/citizenwallet/engine/internal/ethrequest"
-	"github.com/citizenwallet/engine/pkg/common"
+	"github.com/citizenapp2/relay/internal/config"
+	"github.com/citizenapp2/relay/internal/ethrequest"
+	"github.com/citizenapp2/relay/pkg/common"
 	"github.com/fiatjaf/eventstore/postgresql"
 	"github.com/fiatjaf/khatru"
 	"github.com/nbd-wtf/go-nostr"
 )
 
 func main() {
-	log.Default().Println("starting engine...")
+	log.Default().Println("starting relay...")
 
 	////////////////////
 	// flags

@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/citizenwallet/engine/pkg/common"
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/pkg/common"
+	"github.com/citizenapp2/relay/pkg/relay"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -51,8 +51,8 @@ func (db *SponsorDB) CreateSponsorsTableIndexes(suffix string) error {
 }
 
 // GetSponsor gets a sponsor from the db by contract
-func (db *SponsorDB) GetSponsor(contract string) (*engine.Sponsor, error) {
-	var sponsor engine.Sponsor
+func (db *SponsorDB) GetSponsor(contract string) (*relay.Sponsor, error) {
+	var sponsor relay.Sponsor
 	err := db.rdb.QueryRow(db.ctx, fmt.Sprintf(`
 	SELECT contract, pk, created_at, updated_at
 	FROM t_sponsors_%s
@@ -73,7 +73,7 @@ func (db *SponsorDB) GetSponsor(contract string) (*engine.Sponsor, error) {
 }
 
 // AddSponsor adds a sponsor to the db
-func (db *SponsorDB) AddSponsor(sponsor *engine.Sponsor) error {
+func (db *SponsorDB) AddSponsor(sponsor *relay.Sponsor) error {
 	encrypted, err := common.Encrypt(sponsor.PrivateKey, db.secret)
 	if err != nil {
 		return err
@@ -91,7 +91,7 @@ func (db *SponsorDB) AddSponsor(sponsor *engine.Sponsor) error {
 }
 
 // UpdateSponsor updates a sponsor in the db
-func (db *SponsorDB) UpdateSponsor(sponsor *engine.Sponsor) error {
+func (db *SponsorDB) UpdateSponsor(sponsor *relay.Sponsor) error {
 	encrypted, err := common.Encrypt(sponsor.PrivateKey, db.secret)
 	if err != nil {
 		return err

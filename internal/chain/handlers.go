@@ -5,16 +5,16 @@ import (
 	"math/big"
 	"net/http"
 
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/pkg/relay"
 )
 
 type Service struct {
-	evm     engine.EVMRequester
+	evm     relay.EVMRequester
 	chainId *big.Int
 }
 
 // NewService
-func NewService(evm engine.EVMRequester, chid *big.Int) *Service {
+func NewService(evm relay.EVMRequester, chid *big.Int) *Service {
 	return &Service{
 		evm,
 		chid,

@@ -1,4 +1,4 @@
-package engine
+package relay
 
 type Profile struct {
 	Account     string `json:"account"`

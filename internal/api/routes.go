@@ -1,18 +1,18 @@
 package api
 
 import (
-	"github.com/citizenwallet/engine/internal/accounts"
-	"github.com/citizenwallet/engine/internal/bucket"
-	"github.com/citizenwallet/engine/internal/chain"
-	"github.com/citizenwallet/engine/internal/events"
-	"github.com/citizenwallet/engine/internal/logs"
-	"github.com/citizenwallet/engine/internal/paymaster"
-	"github.com/citizenwallet/engine/internal/profiles"
-	"github.com/citizenwallet/engine/internal/push"
-	"github.com/citizenwallet/engine/internal/rpc"
-	"github.com/citizenwallet/engine/internal/userop"
-	"github.com/citizenwallet/engine/internal/version"
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/internal/accounts"
+	"github.com/citizenapp2/relay/internal/bucket"
+	"github.com/citizenapp2/relay/internal/chain"
+	"github.com/citizenapp2/relay/internal/events"
+	"github.com/citizenapp2/relay/internal/logs"
+	"github.com/citizenapp2/relay/internal/paymaster"
+	"github.com/citizenapp2/relay/internal/profiles"
+	"github.com/citizenapp2/relay/internal/push"
+	"github.com/citizenapp2/relay/internal/rpc"
+	"github.com/citizenapp2/relay/internal/userop"
+	"github.com/citizenapp2/relay/internal/version"
+	"github.com/citizenapp2/relay/pkg/relay"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -97,7 +97,7 @@ func (s *Server) AddRoutes(cr *chi.Mux, b *bucket.Bucket) *chi.Mux {
 
 		// rpc
 		cr.Route("/rpc/{pm_address}", func(cr chi.Router) {
-			cr.Post("/", withJSONRPCRequest(map[string]engine.RPCHandlerFunc{
+			cr.Post("/", withJSONRPCRequest(map[string]relay.RPCHandlerFunc{
 				"pm_sponsorUserOperation":   pm.Sponsor,
 				"pm_ooSponsorUserOperation": pm.OOSponsor,
 				"eth_sendUserOperation":     uop.Send,

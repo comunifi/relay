@@ -6,12 +6,12 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/citizenwallet/engine/pkg/engine"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 
-	comm "github.com/citizenwallet/engine/pkg/common"
+	comm "github.com/citizenapp2/relay/pkg/common"
+	"github.com/citizenapp2/relay/pkg/relay"
 )
 
 type block struct {
@@ -24,7 +24,7 @@ type cleanup struct {
 	b uint64
 }
 
-func (i *Indexer) ListenToLogs(ev *engine.Event, quitAck chan error) error {
+func (i *Indexer) ListenToLogs(ev *relay.Event, quitAck chan error) error {
 	logch := make(chan types.Log)
 
 	q, err := i.FilterQueryFromEvent(ev)
@@ -65,7 +65,7 @@ func (i *Indexer) ListenToLogs(ev *engine.Event, quitAck chan error) error {
 			toDelete = append(toDelete, cleanup{t: blk.Time + 60, b: blk.Number})
 		}
 
-		topics, err := engine.ParseTopicsFromHashes(ev, log.Topics, log.Data)
+		topics, err := relay.ParseTopicsFromHashes(ev, log.Topics, log.Data)
 		if err != nil {
 			// Log the error but don't crash the indexer
 			// This can happen when event signatures are malformed or empty
@@ -78,7 +78,7 @@ func (i *Indexer) ListenToLogs(ev *engine.Event, quitAck chan error) error {
 			return err
 		}
 
-		l := &engine.Log{
+		l := &relay.Log{
 			TxHash:    log.TxHash.Hex(),
 			CreatedAt: time.Unix(int64(blk.Time), 0).UTC(),
 			UpdatedAt: time.Now().UTC(),
@@ -86,13 +86,13 @@ func (i *Indexer) ListenToLogs(ev *engine.Event, quitAck chan error) error {
 			To:        log.Address.Hex(),
 			Value:     big.NewInt(0), // Set to 0 as we don't have this information from the log
 			Data:      (*json.RawMessage)(&b),
-			ExtraData: nil,                     // Set to nil as we don't have extra data
-			Status:    engine.LogStatusSuccess, // Assuming a default status of Pending
+			ExtraData: nil,                    // Set to nil as we don't have extra data
+			Status:    relay.LogStatusSuccess, // Assuming a default status of Pending
 		}
 
 		l.Hash = l.GenerateUniqueHash()
 
-		err = i.db.LogDB.AddLogs([]*engine.Log{l})
+		err = i.db.LogDB.AddLogs([]*relay.Log{l})
 		if err != nil {
 			return err
 		}
@@ -102,7 +102,7 @@ func (i *Indexer) ListenToLogs(ev *engine.Event, quitAck chan error) error {
 			return err
 		}
 
-		i.pools.BroadcastMessage(engine.WSMessageTypeUpdate, dbLog)
+		i.pools.BroadcastMessage(relay.WSMessageTypeUpdate, dbLog)
 
 		// TODO: cleanup old sending logs which have no data
 
@@ -116,7 +116,7 @@ func (i *Indexer) ListenToLogs(ev *engine.Event, quitAck chan error) error {
 	return nil
 }
 
-func (i *Indexer) FilterQueryFromEvent(ev *engine.Event) (*ethereum.FilterQuery, error) {
+func (i *Indexer) FilterQueryFromEvent(ev *relay.Event) (*ethereum.FilterQuery, error) {
 	topic0 := ev.GetTopic0FromEventSignature()
 
 	topics := [][]common.Hash{

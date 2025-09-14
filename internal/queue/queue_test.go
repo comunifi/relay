@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/pkg/relay"
 	"github.com/ethereum/go-ethereum/common"
 )
 
@@ -20,13 +20,13 @@ type TestTxProcessor struct {
 	expectedError error
 }
 
-func (p *TestTxProcessor) Process(messages []engine.Message) ([]engine.Message, []error) {
-	invalidMessages := []engine.Message{}
+func (p *TestTxProcessor) Process(messages []relay.Message) ([]relay.Message, []error) {
+	invalidMessages := []relay.Message{}
 	messageErrors := []error{}
 
 	for _, m := range messages {
 		p.count++
-		_, ok := m.Message.(engine.UserOpMessage)
+		_, ok := m.Message.(relay.UserOpMessage)
 		if !ok {
 			invalidMessages = append(invalidMessages, m)
 			messageErrors = append(messageErrors, p.expectedError)
@@ -41,13 +41,13 @@ func TestProcessMessages(t *testing.T) {
 	expectedTxError := errors.New("invalid tx message")
 
 	t.Run("TxMessages", func(t *testing.T) {
-		testCases := []engine.Message{
-			*engine.NewTxMessage(common.Address{}, common.Address{}, common.Big0, engine.UserOp{}, nil, nil),
-			*engine.NewTxMessage(common.Address{}, common.Address{}, common.Big0, engine.UserOp{}, nil, nil),
-			*engine.NewTxMessage(common.Address{}, common.Address{}, common.Big0, engine.UserOp{}, nil, nil),
-			*engine.NewTxMessage(common.Address{}, common.Address{}, common.Big0, engine.UserOp{}, nil, nil),
-			*engine.NewTxMessage(common.Address{}, common.Address{}, common.Big0, engine.UserOp{}, nil, nil),
-			*engine.NewTxMessage(common.Address{}, common.Address{}, common.Big0, engine.UserOp{}, nil, nil),
+		testCases := []relay.Message{
+			*relay.NewTxMessage(common.Address{}, common.Address{}, common.Big0, relay.UserOp{}, nil, nil),
+			*relay.NewTxMessage(common.Address{}, common.Address{}, common.Big0, relay.UserOp{}, nil, nil),
+			*relay.NewTxMessage(common.Address{}, common.Address{}, common.Big0, relay.UserOp{}, nil, nil),
+			*relay.NewTxMessage(common.Address{}, common.Address{}, common.Big0, relay.UserOp{}, nil, nil),
+			*relay.NewTxMessage(common.Address{}, common.Address{}, common.Big0, relay.UserOp{}, nil, nil),
+			*relay.NewTxMessage(common.Address{}, common.Address{}, common.Big0, relay.UserOp{}, nil, nil),
 		}
 
 		q, qerr := NewService("tx", 3, 10, nil)
@@ -92,18 +92,18 @@ func TestProcessMessages(t *testing.T) {
 	})
 
 	t.Run("TxMessages with 1 invalid", func(t *testing.T) {
-		testCases := []engine.Message{
-			*engine.NewTxMessage(common.Address{}, common.Address{}, common.Big0, engine.UserOp{}, nil, nil),
-			*engine.NewTxMessage(common.Address{}, common.Address{}, common.Big0, engine.UserOp{}, nil, nil),
-			*engine.NewTxMessage(common.Address{}, common.Address{}, common.Big0, engine.UserOp{}, nil, nil),
-			*engine.NewTxMessage(common.Address{}, common.Address{}, common.Big0, engine.UserOp{}, nil, nil),
+		testCases := []relay.Message{
+			*relay.NewTxMessage(common.Address{}, common.Address{}, common.Big0, relay.UserOp{}, nil, nil),
+			*relay.NewTxMessage(common.Address{}, common.Address{}, common.Big0, relay.UserOp{}, nil, nil),
+			*relay.NewTxMessage(common.Address{}, common.Address{}, common.Big0, relay.UserOp{}, nil, nil),
+			*relay.NewTxMessage(common.Address{}, common.Address{}, common.Big0, relay.UserOp{}, nil, nil),
 			{ID: "invalid", CreatedAt: time.Now(), RetryCount: 0, Message: "invalid"},
-			*engine.NewTxMessage(common.Address{}, common.Address{}, common.Big0, engine.UserOp{}, nil, nil),
-			*engine.NewTxMessage(common.Address{}, common.Address{}, common.Big0, engine.UserOp{}, nil, nil),
-			*engine.NewTxMessage(common.Address{}, common.Address{}, common.Big0, engine.UserOp{}, nil, nil),
-			*engine.NewTxMessage(common.Address{}, common.Address{}, common.Big0, engine.UserOp{}, nil, nil),
-			*engine.NewTxMessage(common.Address{}, common.Address{}, common.Big0, engine.UserOp{}, nil, nil),
-			*engine.NewTxMessage(common.Address{}, common.Address{}, common.Big0, engine.UserOp{}, nil, nil),
+			*relay.NewTxMessage(common.Address{}, common.Address{}, common.Big0, relay.UserOp{}, nil, nil),
+			*relay.NewTxMessage(common.Address{}, common.Address{}, common.Big0, relay.UserOp{}, nil, nil),
+			*relay.NewTxMessage(common.Address{}, common.Address{}, common.Big0, relay.UserOp{}, nil, nil),
+			*relay.NewTxMessage(common.Address{}, common.Address{}, common.Big0, relay.UserOp{}, nil, nil),
+			*relay.NewTxMessage(common.Address{}, common.Address{}, common.Big0, relay.UserOp{}, nil, nil),
+			*relay.NewTxMessage(common.Address{}, common.Address{}, common.Big0, relay.UserOp{}, nil, nil),
 		}
 
 		q, qerr := NewService("tx", 3, 10, nil)

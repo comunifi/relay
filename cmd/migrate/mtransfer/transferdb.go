@@ -6,7 +6,7 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/citizenwallet/engine/pkg/common"
+	"github.com/citizenapp2/relay/pkg/common"
 )
 
 type TransferDB struct {

@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	comm "github.com/citizenwallet/engine/pkg/common"
-	"github.com/citizenwallet/engine/pkg/engine"
+	comm "github.com/citizenapp2/relay/pkg/common"
+	"github.com/citizenapp2/relay/pkg/relay"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/account"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4/ecdsa"
@@ -43,9 +43,9 @@ var (
 		"X-Requested-With",
 		"Accept-Encoding",
 		"Authorization",
-		engine.SignatureHeader,
-		engine.AddressHeader,
-		engine.AppVersionHeader,
+		relay.SignatureHeader,
+		relay.AddressHeader,
+		relay.AppVersionHeader,
 	}
 
 	MAGIC_VALUE = [4]byte{0x16, 0x26, 0xba, 0x7e}
@@ -141,10 +141,10 @@ type signedBody struct {
 }
 
 // withSignature is a middleware that checks the signature of the request against the request headers
-func withSignature(evm engine.EVMRequester, h http.HandlerFunc) http.HandlerFunc {
+func withSignature(evm relay.EVMRequester, h http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// check signature
-		signature := r.Header.Get(engine.SignatureHeader)
+		signature := r.Header.Get(relay.SignatureHeader)
 		if signature == "" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -158,7 +158,7 @@ func withSignature(evm engine.EVMRequester, h http.HandlerFunc) http.HandlerFunc
 		defer r.Body.Close()
 
 		// get address
-		addr := r.Header.Get(engine.AddressHeader)
+		addr := r.Header.Get(relay.AddressHeader)
 		if addr == "" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -192,8 +192,8 @@ func withSignature(evm engine.EVMRequester, h http.HandlerFunc) http.HandlerFunc
 		r.Body = io.NopCloser(strings.NewReader(string(req.Data)))
 		r.ContentLength = int64(len(req.Data))
 
-		ctx := context.WithValue(r.Context(), engine.ContextKeyAddress, addr)
-		ctx = context.WithValue(ctx, engine.ContextKeySignature, signature)
+		ctx := context.WithValue(r.Context(), relay.ContextKeyAddress, addr)
+		ctx = context.WithValue(ctx, relay.ContextKeySignature, signature)
 
 		h(w, r.WithContext(ctx))
 		return
@@ -201,10 +201,10 @@ func withSignature(evm engine.EVMRequester, h http.HandlerFunc) http.HandlerFunc
 }
 
 // withMultiPartSignature is a middleware that checks the signature of the request against a multi-part request headers
-func withMultiPartSignature(evm engine.EVMRequester, h http.HandlerFunc) http.HandlerFunc {
+func withMultiPartSignature(evm relay.EVMRequester, h http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// check signature
-		signature := r.Header.Get(engine.SignatureHeader)
+		signature := r.Header.Get(relay.SignatureHeader)
 		if signature == "" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -219,7 +219,7 @@ func withMultiPartSignature(evm engine.EVMRequester, h http.HandlerFunc) http.Ha
 		}
 
 		// get address
-		addr := r.Header.Get(engine.AddressHeader)
+		addr := r.Header.Get(relay.AddressHeader)
 		if addr == "" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -252,7 +252,7 @@ func withMultiPartSignature(evm engine.EVMRequester, h http.HandlerFunc) http.Ha
 
 		r.MultipartForm.Value["body"] = []string{string(req.Data)}
 
-		ctx := context.WithValue(r.Context(), engine.ContextKeyAddress, addr)
+		ctx := context.WithValue(r.Context(), relay.ContextKeyAddress, addr)
 
 		h(w, r.WithContext(ctx))
 		return
@@ -260,10 +260,10 @@ func withMultiPartSignature(evm engine.EVMRequester, h http.HandlerFunc) http.Ha
 }
 
 // with1271Signature is a middleware that checks the owner's signature of the request against the request headers and the actual account on-chain
-func with1271Signature(evm engine.EVMRequester, h http.HandlerFunc) http.HandlerFunc {
+func with1271Signature(evm relay.EVMRequester, h http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// parse signature from header
-		signature := r.Header.Get(engine.SignatureHeader)
+		signature := r.Header.Get(relay.SignatureHeader)
 		if signature == "" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -277,7 +277,7 @@ func with1271Signature(evm engine.EVMRequester, h http.HandlerFunc) http.Handler
 		defer r.Body.Close()
 
 		// get address
-		addr := r.Header.Get(engine.AddressHeader)
+		addr := r.Header.Get(relay.AddressHeader)
 		if addr == "" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -294,8 +294,8 @@ func with1271Signature(evm engine.EVMRequester, h http.HandlerFunc) http.Handler
 		r.Body = io.NopCloser(strings.NewReader(string(req.Data)))
 		r.ContentLength = int64(len(req.Data))
 
-		ctx := context.WithValue(r.Context(), engine.ContextKeyAddress, addr)
-		ctx = context.WithValue(ctx, engine.ContextKeySignature, signature)
+		ctx := context.WithValue(r.Context(), relay.ContextKeyAddress, addr)
+		ctx = context.WithValue(ctx, relay.ContextKeySignature, signature)
 
 		h(w, r.WithContext(ctx))
 		return
@@ -303,7 +303,7 @@ func with1271Signature(evm engine.EVMRequester, h http.HandlerFunc) http.Handler
 }
 
 // withJSONRPCRequest is a middleware that handles a JSON RPC request
-func withJSONRPCRequest(hmap map[string]engine.RPCHandlerFunc) http.HandlerFunc {
+func withJSONRPCRequest(hmap map[string]relay.RPCHandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 		var raw json.RawMessage
@@ -313,8 +313,8 @@ func withJSONRPCRequest(hmap map[string]engine.RPCHandlerFunc) http.HandlerFunc 
 		}
 		defer r.Body.Close()
 
-		var singleReq engine.JsonRPCRequest
-		var multiReq []engine.JsonRPCRequest
+		var singleReq relay.JsonRPCRequest
+		var multiReq []relay.JsonRPCRequest
 
 		// parse request
 		err := json.Unmarshal(raw, &singleReq)
@@ -496,7 +496,7 @@ func verifyV2Signature(req signedBody, addr common.Address, signature string) bo
 }
 
 // verify1271Signature verifies the signature of the request against the actual account on-chain if local fails
-func verify1271Signature(evm engine.EVMRequester, req signedBody, accaddr common.Address, signature string) bool {
+func verify1271Signature(evm relay.EVMRequester, req signedBody, accaddr common.Address, signature string) bool {
 	// verify that the signature is v3
 	if req.Version != 3 {
 		return false
@@ -590,7 +590,7 @@ func verify1271Signature(evm engine.EVMRequester, req signedBody, accaddr common
 	}
 
 	// check the Safe for valid signature
-	safeABI, err := abi.JSON(strings.NewReader(engine.SafeAbi))
+	safeABI, err := abi.JSON(strings.NewReader(relay.SafeAbi))
 	if err != nil {
 		return false
 	}

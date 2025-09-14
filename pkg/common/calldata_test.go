@@ -7,7 +7,7 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/pkg/relay"
 	ethereum "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -92,7 +92,7 @@ func TestParseERC20Transfer(t *testing.T) {
 
 type MockEVMRequester struct{}
 
-func NewMockEVMRequester() engine.EVMRequester {
+func NewMockEVMRequester() relay.EVMRequester {
 	return &MockEVMRequester{}
 }
 

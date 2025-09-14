@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/citizenwallet/engine/internal/db"
-	"github.com/citizenwallet/engine/internal/ws"
-	comm "github.com/citizenwallet/engine/pkg/common"
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/internal/db"
+	"github.com/citizenapp2/relay/internal/ws"
+	comm "github.com/citizenapp2/relay/pkg/common"
+	"github.com/citizenapp2/relay/pkg/relay"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/tokenEntryPoint"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -24,13 +24,13 @@ type UserOpService struct {
 	inProgress map[common.Address][]string
 	mu         sync.Mutex
 	db         *db.DB
-	evm        engine.EVMRequester
+	evm        relay.EVMRequester
 	pushq      *Service
 	pools      *ws.ConnectionPools
 }
 
 func NewUserOpService(db *db.DB,
-	evm engine.EVMRequester,
+	evm relay.EVMRequester,
 	pushq *Service,
 	pools *ws.ConnectionPools) *UserOpService {
 	return &UserOpService{
@@ -42,20 +42,20 @@ func NewUserOpService(db *db.DB,
 	}
 }
 
-// Process method processes messages of type []engine.Message and returns processed messages and an errors if any.
-func (s *UserOpService) Process(messages []engine.Message) (invalid []engine.Message, errors []error) {
-	invalid = []engine.Message{}
+// Process method processes messages of type []relay.Message and returns processed messages and an errors if any.
+func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Message, errors []error) {
+	invalid = []relay.Message{}
 	errors = []error{}
 
-	messagesBySponsor := map[common.Address][]engine.Message{}
-	txmBySponsor := map[common.Address][]engine.UserOpMessage{}
+	messagesBySponsor := map[common.Address][]relay.Message{}
+	txmBySponsor := map[common.Address][]relay.UserOpMessage{}
 
 	// first organize messages by sponsors
 	for _, message := range messages {
-		// Type assertion to check if the msgs... is of type engine.UserOpMessage
-		txm, ok := message.Message.(engine.UserOpMessage)
+		// Type assertion to check if the msgs... is of type relay.UserOpMessage
+		txm, ok := message.Message.(relay.UserOpMessage)
 		if !ok {
-			// If the message is not of type engine.UserOpMessage, return an error
+			// If the message is not of type relay.UserOpMessage, return an error
 			invalid = append(invalid, message)
 			errors = append(errors, fmt.Errorf("invalid tx msgs..."))
 			continue
@@ -181,7 +181,7 @@ func (s *UserOpService) Process(messages []engine.Message) (invalid []engine.Mes
 		s.inProgress[sponsor] = append(s.inProgress[sponsor], signedTxHash)
 		s.mu.Unlock()
 
-		insertedLogs := map[common.Address][]*engine.Log{}
+		insertedLogs := map[common.Address][]*relay.Log{}
 
 		ldb := s.db.LogDB
 		edb := s.db.EventDB
@@ -241,7 +241,7 @@ func (s *UserOpService) Process(messages []engine.Message) (invalid []engine.Mes
 				continue
 			}
 
-			log := &engine.Log{
+			log := &relay.Log{
 				TxHash:    signedTxHash,
 				CreatedAt: time.Now().UTC(),
 				UpdatedAt: time.Now().UTC(),
@@ -251,7 +251,7 @@ func (s *UserOpService) Process(messages []engine.Message) (invalid []engine.Mes
 				Value:     common.Big0,
 				Data:      data,
 				ExtraData: txdata,
-				Status:    engine.LogStatusSending,
+				Status:    relay.LogStatusSending,
 			}
 
 			log.Hash = log.GenerateUniqueHash()
@@ -262,7 +262,7 @@ func (s *UserOpService) Process(messages []engine.Message) (invalid []engine.Mes
 			}
 
 			// broadcast updates to connected clients
-			s.pools.BroadcastMessage(engine.WSMessageTypeNew, log)
+			s.pools.BroadcastMessage(relay.WSMessageTypeNew, log)
 
 			insertedLogs[txm.Paymaster] = append(insertedLogs[txm.Paymaster], log)
 		}
@@ -279,16 +279,16 @@ func (s *UserOpService) Process(messages []engine.Message) (invalid []engine.Mes
 						ldb.RemoveLog(log.Hash)
 
 						// broadcast updates to connected clients
-						s.pools.BroadcastMessage(engine.WSMessageTypeRemove, log)
+						s.pools.BroadcastMessage(relay.WSMessageTypeRemove, log)
 					}
 				}
 
 				for _, msg := range msgs {
-					txm, ok := msg.Message.(engine.UserOpMessage)
+					txm, ok := msg.Message.(relay.UserOpMessage)
 					if ok {
 						txm.BumpGas += 1
 						println("bumping gas for new message:", txm.BumpGas)
-						invalid = append(invalid, *engine.NewMessage(msg.ID, txm, msg.RetryCount, msg.Response))
+						invalid = append(invalid, *relay.NewMessage(msg.ID, txm, msg.RetryCount, msg.Response))
 					}
 				}
 
@@ -311,7 +311,7 @@ func (s *UserOpService) Process(messages []engine.Message) (invalid []engine.Mes
 						ldb.RemoveLog(log.Hash)
 
 						// broadcast updates to connected clients
-						s.pools.BroadcastMessage(engine.WSMessageTypeRemove, log)
+						s.pools.BroadcastMessage(relay.WSMessageTypeRemove, log)
 					}
 				}
 
@@ -336,7 +336,7 @@ func (s *UserOpService) Process(messages []engine.Message) (invalid []engine.Mes
 						ldb.RemoveLog(log.Hash)
 
 						// broadcast updates to connected clients
-						s.pools.BroadcastMessage(engine.WSMessageTypeRemove, log)
+						s.pools.BroadcastMessage(relay.WSMessageTypeRemove, log)
 					}
 				}
 
@@ -356,11 +356,11 @@ func (s *UserOpService) Process(messages []engine.Message) (invalid []engine.Mes
 
 			for _, logs := range insertedLogs {
 				for _, log := range logs {
-					ldb.SetStatus(log.Hash, string(engine.LogStatusFail))
+					ldb.SetStatus(log.Hash, string(relay.LogStatusFail))
 
 					// broadcast updates to connected clients
-					log.Status = engine.LogStatusFail
-					s.pools.BroadcastMessage(engine.WSMessageTypeUpdate, log)
+					log.Status = relay.LogStatusFail
+					s.pools.BroadcastMessage(relay.WSMessageTypeUpdate, log)
 				}
 			}
 
@@ -386,12 +386,12 @@ func (s *UserOpService) Process(messages []engine.Message) (invalid []engine.Mes
 
 		for _, logs := range insertedLogs {
 			for _, log := range logs {
-				err := ldb.SetStatus(log.Hash, string(engine.LogStatusPending))
+				err := ldb.SetStatus(log.Hash, string(relay.LogStatusPending))
 				if err != nil {
 					ldb.RemoveLog(log.Hash)
 
 					// broadcast updates to connected clients
-					s.pools.BroadcastMessage(engine.WSMessageTypeRemove, log)
+					s.pools.BroadcastMessage(relay.WSMessageTypeRemove, log)
 				}
 			}
 		}
@@ -405,7 +405,7 @@ func (s *UserOpService) Process(messages []engine.Message) (invalid []engine.Mes
 						ldb.RemoveLog(log.Hash)
 
 						// broadcast updates to connected clients
-						s.pools.BroadcastMessage(engine.WSMessageTypeRemove, log)
+						s.pools.BroadcastMessage(relay.WSMessageTypeRemove, log)
 					}
 				}
 			}

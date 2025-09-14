@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/citizenwallet/engine/internal/db"
-	"github.com/citizenwallet/engine/internal/ws"
+	"github.com/citizenapp2/relay/internal/db"
+	"github.com/citizenapp2/relay/internal/ws"
 	"github.com/go-chi/chi/v5"
 )
 

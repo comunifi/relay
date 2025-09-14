@@ -7,18 +7,18 @@ import (
 	"log"
 	"time"
 
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/pkg/relay"
 )
 
 const batchSize = 10 // Size of each batch
 
 // Service struct represents a queue service with a queue channel, quit channel, maximum retries, context and a webhook messager.
 type Service struct {
-	name       string              // Name of the queue service
-	queue      chan engine.Message // Channel to enqueue messages
-	quit       chan bool           // Channel to signal service to stop
-	maxRetries int                 // Maximum number of retries for processing a message
-	bufferSize int                 // Buffer size of the queue channel
+	name       string             // Name of the queue service
+	queue      chan relay.Message // Channel to enqueue messages
+	quit       chan bool          // Channel to signal service to stop
+	maxRetries int                // Maximum number of retries for processing a message
+	bufferSize int                // Buffer size of the queue channel
 
 	ctx context.Context // Context to carry deadlines, cancellation signals, and other request-scoped values across API boundaries and between processes
 	err chan error      // to notify errors
@@ -26,7 +26,7 @@ type Service struct {
 
 // Processor is an interface that must be implemented by the consumer of the queue
 type Processor interface {
-	Process([]engine.Message) ([]engine.Message, []error) // Process method to process a message
+	Process([]relay.Message) ([]relay.Message, []error) // Process method to process a message
 }
 
 // NewService function initializes a new Service with provided maximum retries, context and webhook messager.
@@ -34,18 +34,18 @@ func NewService(name string, maxRetries, bufferSize int, ctx context.Context) (*
 	err := make(chan error)
 
 	return &Service{
-		name:       name,                                  // Set the name
-		queue:      make(chan engine.Message, bufferSize), // Initialize the buffered queue channel
-		quit:       make(chan bool),                       // Initialize the quit channel
-		maxRetries: maxRetries,                            // Set the maximum retries
-		bufferSize: bufferSize,                            // Set the buffer size
-		ctx:        ctx,                                   // Set the context
-		err:        err,                                   // Initialize the error channel
+		name:       name,                                 // Set the name
+		queue:      make(chan relay.Message, bufferSize), // Initialize the buffered queue channel
+		quit:       make(chan bool),                      // Initialize the quit channel
+		maxRetries: maxRetries,                           // Set the maximum retries
+		bufferSize: bufferSize,                           // Set the buffer size
+		ctx:        ctx,                                  // Set the context
+		err:        err,                                  // Initialize the error channel
 	}, err
 }
 
 // Enqueue method enqueues a message to the queue channel.
-func (s *Service) Enqueue(message engine.Message) {
+func (s *Service) Enqueue(message relay.Message) {
 	// if the queue channel is almost full, notify the webhook messager with a warning notification
 	bufferWarning := s.bufferSize - (s.bufferSize / 5)
 	if len(s.queue) > bufferWarning {
@@ -76,7 +76,7 @@ func (s *Service) Start(p Processor) error {
 		select {
 		case message := <-s.queue:
 			// Create a batch
-			batch := make([]engine.Message, 0, batchSize)
+			batch := make([]relay.Message, 0, batchSize)
 
 			batch = append(batch, message)
 

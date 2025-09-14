@@ -10,11 +10,11 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/citizenwallet/engine/cmd/migrate/mtransfer"
-	"github.com/citizenwallet/engine/internal/config"
-	"github.com/citizenwallet/engine/internal/db"
-	"github.com/citizenwallet/engine/internal/ethrequest"
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/cmd/migrate/mtransfer"
+	"github.com/citizenapp2/relay/internal/config"
+	"github.com/citizenapp2/relay/internal/db"
+	"github.com/citizenapp2/relay/internal/ethrequest"
+	"github.com/citizenapp2/relay/pkg/relay"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -131,8 +131,8 @@ func getTransfers(db *sql.DB, offset, limit int, suffix string) ([]*mtransfer.Tr
 	return transfers, nil
 }
 
-func convertTransfersToLogs(transfers []*mtransfer.Transfer, contractAddress string) []*engine.Log {
-	var logs []*engine.Log
+func convertTransfersToLogs(transfers []*mtransfer.Transfer, contractAddress string) []*relay.Log {
+	var logs []*relay.Log
 	for _, t := range transfers {
 		data := map[string]interface{}{
 			"topic": transferTopic,
@@ -153,7 +153,7 @@ func convertTransfersToLogs(transfers []*mtransfer.Transfer, contractAddress str
 			extraDataRaw = json.RawMessage(b)
 		}
 
-		log := &engine.Log{
+		log := &relay.Log{
 			Hash:      t.Hash,
 			TxHash:    t.TxHash,
 			CreatedAt: t.CreatedAt,
@@ -164,7 +164,7 @@ func convertTransfersToLogs(transfers []*mtransfer.Transfer, contractAddress str
 			Value:     big.NewInt(0),
 			Data:      &dataRaw,
 			ExtraData: &extraDataRaw,
-			Status:    engine.LogStatusSuccess,
+			Status:    relay.LogStatusSuccess,
 		}
 		logs = append(logs, log)
 	}

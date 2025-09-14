@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/citizenwallet/engine/internal/db"
-	"github.com/citizenwallet/engine/internal/ethrequest"
-	"github.com/citizenwallet/engine/pkg/engine"
-	eth "github.com/citizenwallet/nostr-eth"
+	eth "github.com/citizenapp2/nostr-eth"
+	"github.com/citizenapp2/relay/internal/db"
+	"github.com/citizenapp2/relay/internal/ethrequest"
+	"github.com/citizenapp2/relay/pkg/relay"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -142,7 +142,7 @@ func MigrateLogs(ctx context.Context, evm *ethrequest.EthService, chainID *big.I
 	return nil
 }
 
-func convertLogToEvent(secretKey string, log *engine.Log) *nostr.Event {
+func convertLogToEvent(secretKey string, log *relay.Log) *nostr.Event {
 	ev, err := eth.CreateTxLogEvent(log, secretKey)
 	if err != nil {
 		fmt.Println("Error creating tx log event:", err)

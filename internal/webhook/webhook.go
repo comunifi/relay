@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/citizenwallet/engine/pkg/engine"
+	"github.com/citizenapp2/relay/pkg/relay"
 )
 
 type Message struct {
@@ -22,7 +22,7 @@ type Messager struct {
 	notify bool
 }
 
-func NewMessager(baseURL, serverName string, notify bool) engine.WebhookMessager {
+func NewMessager(baseURL, serverName string, notify bool) relay.WebhookMessager {
 	return &Messager{
 		BaseURL:    baseURL,
 		ServerName: serverName,
