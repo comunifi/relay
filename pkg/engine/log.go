@@ -44,6 +44,7 @@ func LogStatusFromString(s string) (LogStatus, error) {
 type Log struct {
 	Hash      string           `json:"hash"`
 	TxHash    string           `json:"tx_hash"`
+	ChainID   string           `json:"chain_id"`
 	CreatedAt time.Time        `json:"created_at"`
 	UpdatedAt time.Time        `json:"updated_at"`
 	Nonce     int64            `json:"nonce"`
@@ -53,6 +54,13 @@ type Log struct {
 	Data      *json.RawMessage `json:"data"`
 	ExtraData *json.RawMessage `json:"extra_data"`
 	Status    LogStatus        `json:"status"`
+}
+
+type LogTransferData struct {
+	To    string `json:"to"`
+	From  string `json:"from"`
+	Topic string `json:"topic"`
+	Value string `json:"value"`
 }
 
 // generate hash for transfer using a provided index, from, to and the tx hash
@@ -68,6 +76,7 @@ func (t *Log) GenerateUniqueHash() string {
 	}
 
 	buf.Write(common.FromHex(t.TxHash))
+	buf.Write(common.FromHex(t.ChainID))
 
 	hash := crypto.Keccak256Hash(buf.Bytes())
 	return hash.Hex()
@@ -93,6 +102,7 @@ func (t *Log) Update(tx *Log) {
 	// update all fields
 	t.Hash = tx.Hash
 	t.TxHash = tx.TxHash
+	t.ChainID = tx.ChainID
 	t.CreatedAt = tx.CreatedAt
 	t.UpdatedAt = time.Now()
 	t.Nonce = tx.Nonce

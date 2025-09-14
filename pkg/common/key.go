@@ -20,3 +20,17 @@ func HexToPrivateKey(privateKeyHex string) (*ecdsa.PrivateKey, error) {
 
 	return privateKey, nil
 }
+
+func PrivateKeyToPublicKey(privateKeyHex string) (string, error) {
+	privateKeyBytes, err := hex.DecodeString(privateKeyHex)
+	if err != nil {
+		return "", err
+	}
+
+	privateKey, err := crypto.ToECDSA(privateKeyBytes)
+	if err != nil {
+		return "", err
+	}
+
+	return privateKey.PublicKey.X.String(), nil
+}

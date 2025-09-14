@@ -19,6 +19,30 @@
       "mode": "auto",
       "program": "${workspaceFolder}/cmd/main.go",
       "args": ["-env", "../.env", "-noindex"]
+    },
+    {
+      "name": "Launch relay",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/relay/main.go",
+      "args": ["-env", "../../.env"]
+    },
+    {
+      "name": "Launch relay event test",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/relay-event-test/main.go",
+      "args": ["-env", "../../.env"]
+    },
+    {
+      "name": "Launch relay tx migration",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/relay-tx-migration/main.go",
+      "args": ["-env", "../../.env"]
     }
   ]
 }
