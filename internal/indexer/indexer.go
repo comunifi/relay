@@ -7,6 +7,7 @@ import (
 	"github.com/citizenapp2/relay/internal/db"
 	"github.com/citizenapp2/relay/internal/ws"
 	"github.com/citizenapp2/relay/pkg/relay"
+	"github.com/fiatjaf/eventstore/postgresql"
 )
 
 type ErrIndexing error
@@ -16,15 +17,18 @@ var (
 )
 
 type Indexer struct {
-	ctx context.Context
+	ctx       context.Context
+	secretKey string
+
 	db  *db.DB
+	ndb *postgresql.PostgresBackend
 	evm relay.EVMRequester
 
 	pools *ws.ConnectionPools
 }
 
-func NewIndexer(ctx context.Context, db *db.DB, evm relay.EVMRequester, pools *ws.ConnectionPools) *Indexer {
-	return &Indexer{ctx: ctx, db: db, evm: evm, pools: pools}
+func NewIndexer(ctx context.Context, secretKey string, db *db.DB, ndb *postgresql.PostgresBackend, evm relay.EVMRequester, pools *ws.ConnectionPools) *Indexer {
+	return &Indexer{ctx: ctx, secretKey: secretKey, db: db, ndb: ndb, evm: evm, pools: pools}
 }
 
 func (i *Indexer) Start() error {

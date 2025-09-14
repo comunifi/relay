@@ -6,6 +6,8 @@ import (
 	"math/big"
 	"time"
 
+	eth "github.com/citizenapp2/nostr-eth"
+
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -97,12 +99,23 @@ func (i *Indexer) ListenToLogs(ev *relay.Event, quitAck chan error) error {
 			return err
 		}
 
-		dbLog, err := i.db.LogDB.GetLog(l.Hash)
+		ev, err := eth.CreateTxLogEvent(l, i.secretKey)
+		if err != nil {
+			fmt.Println("Error creating tx log event:", err)
+			return nil
+		}
+
+		err = ev.Sign(i.secretKey)
 		if err != nil {
 			return err
 		}
 
-		i.pools.BroadcastMessage(relay.WSMessageTypeUpdate, dbLog)
+		err = i.ndb.SaveEvent(i.ctx, ev)
+		if err != nil {
+			return err
+		}
+
+		i.pools.BroadcastMessage(relay.WSMessageTypeUpdate, l)
 
 		// TODO: cleanup old sending logs which have no data
 

@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 
 	"github.com/citizenapp2/relay/internal/api"
 	"github.com/citizenapp2/relay/internal/bucket"
@@ -15,6 +16,9 @@ import (
 	"github.com/citizenapp2/relay/internal/queue"
 	"github.com/citizenapp2/relay/internal/webhook"
 	"github.com/citizenapp2/relay/internal/ws"
+	"github.com/citizenapp2/relay/pkg/common"
+	"github.com/fiatjaf/eventstore/postgresql"
+	"github.com/fiatjaf/khatru"
 )
 
 func main() {
@@ -68,6 +72,21 @@ func main() {
 	}
 
 	log.Default().Println("node running for chain: ", chid.String())
+	////////////////////
+
+	////////////////////
+	// nostr-postgres
+	log.Default().Println("starting internal db service...")
+
+	ndb := postgresql.PostgresBackend{
+		DatabaseURL: fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", conf.DBUser, conf.DBPassword, conf.DBHost, conf.DBPort, conf.DBName),
+	}
+
+	err = ndb.Init()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer ndb.Close()
 	////////////////////
 
 	////////////////////
@@ -137,7 +156,7 @@ func main() {
 	if !*noindex {
 		log.Default().Println("starting indexer service...")
 
-		idx := indexer.NewIndexer(ctx, d, evm, pools)
+		idx := indexer.NewIndexer(ctx, conf.RelayPrivateKey, d, &ndb, evm, pools)
 		go func() {
 			quitAck <- idx.Start()
 		}()
@@ -181,6 +200,36 @@ func main() {
 	}()
 
 	log.Default().Println("listening on port: ", *port)
+	////////////////////
+
+	////////////////////
+	// pubkey
+	pubkey, err := common.PrivateKeyToPublicKey(conf.RelayPrivateKey)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	////////////////////
+
+	////////////////////
+	// nostr
+	relay := khatru.NewRelay()
+
+	relay.Info.Name = conf.RelayInfoName
+	relay.Info.PubKey = pubkey
+	relay.Info.Description = conf.RelayInfoDescription
+	relay.Info.Icon = conf.RelayInfoIcon
+
+	relay.StoreEvent = append(relay.StoreEvent, ndb.SaveEvent)
+	relay.QueryEvents = append(relay.QueryEvents, ndb.QueryEvents)
+	relay.CountEvents = append(relay.CountEvents, ndb.CountEvents)
+	relay.DeleteEvent = append(relay.DeleteEvent, ndb.DeleteEvent)
+	relay.ReplaceEvent = append(relay.ReplaceEvent, ndb.ReplaceEvent)
+
+	go func() {
+		log.Default().Println("relay running on port: 3334")
+		quitAck <- http.ListenAndServe(":3334", relay)
+	}()
 	////////////////////
 
 	for err := range quitAck {
