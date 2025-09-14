@@ -1,5 +1,5 @@
 -- run something when the db starts
-CREATE DATABASE engine;
+CREATE DATABASE relay;
 
-CREATE DATABASE engine_test;
+CREATE DATABASE relay_test;
 

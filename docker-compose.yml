@@ -1,6 +1,6 @@
 services:
   db:
-    container_name: db
+    container_name: relay-db
     build:
       context: .
       dockerfile: ./.docker/db/Dockerfile
@@ -9,42 +9,42 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_DB: ${DB_NAME}
     volumes:
-      - ./.engine/data:/var/lib/postgresql/data
+      - ./.relay/data:/var/lib/postgresql/data
     networks:
-      engine-net:
+      relay-net:
         aliases:
-          - engine-db
+          - relay-db
     ports:
       - "5432:5432"
     restart: on-failure
     healthcheck:
       test: "exit 0"
-  engine:
-    container_name: engine
+  relay:
+    container_name: relay
     build:
       context: .
-      dockerfile: ./.docker/engine/Dockerfile
+      dockerfile: ./.docker/relay/Dockerfile
     networks:
-      engine-net:
+      relay-net:
         aliases:
-          - engine
+          - relay
     ports:
       - "3001:3001"
     restart: on-failure
     healthcheck:
       test: "exit 0"
-  engine_supabase:
-    container_name: engine_supabase
+  relay_supabase:
+    container_name: relay_supabase
     build:
       context: .
-      dockerfile: ./.docker/engine/Dockerfile
+      dockerfile: ./.docker/relay/Dockerfile
     networks:
-      engine-net:
+      relay-net:
         aliases:
-          - engine-supabase
+          - relay-supabase
       supabase_default:
         aliases:
-          - engine-supabase
+          - relay-supabase
     ports:
       - "3001:3001"
     restart: on-failure
@@ -57,16 +57,16 @@ services:
       - 443:443
     restart: always
     volumes:
-      - ./.engine/nginx/conf/:/etc/nginx/conf.d/:ro
+      - ./.relay/nginx/conf/:/etc/nginx/conf.d/:ro
       - certs_www_volume:/var/www/certbot/:ro
       - certs_conf_volume:/etc/nginx/ssl/:ro
     networks:
-      engine-net:
+      relay-net:
         aliases:
-          - engine-server
+          - relay-server
       supabase_default:
         aliases:
-          - engine-server
+          - relay-server
   server-cert:
     image: nginx:latest
     ports:
@@ -74,13 +74,13 @@ services:
       - 443:443
     restart: always
     volumes:
-      - ./.engine/nginx_cert/conf/:/etc/nginx/conf.d/:ro
+      - ./.relay/nginx_cert/conf/:/etc/nginx/conf.d/:ro
       - certs_www_volume:/var/www/certbot/:ro
       - certs_conf_volume:/etc/nginx/ssl/:ro
     networks:
-      engine-net:
+      relay-net:
         aliases:
-          - engine-server-cert
+          - relay-server-cert
   certbot-renew:
     image: certbot/certbot:latest
     volumes:
@@ -93,16 +93,16 @@ volumes:
     driver_opts:
       o: bind
       type: none
-      device: ${PWD}/.engine/certbot/www/
+      device: ${PWD}/.relay/certbot/www/
   certs_conf_volume:
     driver: local
     driver_opts:
       o: bind
       type: none
-      device: ${PWD}/.engine/certbot/conf/
+      device: ${PWD}/.relay/certbot/conf/
 
 networks:
-  engine-net:
-    name: engine-net
+  relay-net:
+    name: relay-net
   supabase_default:
     external: true
