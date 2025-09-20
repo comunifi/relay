@@ -3,7 +3,7 @@ package rpc
 import (
 	"net/http"
 
-	"github.com/citizenapp2/relay/internal/ws"
+	"github.com/comunifi/relay/internal/ws"
 )
 
 type Handlers struct {

@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	comm "github.com/citizenapp2/relay/pkg/common"
-	"github.com/citizenapp2/relay/pkg/relay"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/account"
+	comm "github.com/comunifi/relay/pkg/common"
+	"github.com/comunifi/relay/pkg/relay"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4/ecdsa"
 	"github.com/ethereum/go-ethereum/accounts"

@@ -7,9 +7,9 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/citizenapp2/relay/internal/config"
-	"github.com/citizenapp2/relay/internal/ethrequest"
-	"github.com/citizenapp2/relay/pkg/common"
+	"github.com/comunifi/relay/internal/config"
+	"github.com/comunifi/relay/internal/ethrequest"
+	"github.com/comunifi/relay/pkg/common"
 	"github.com/fiatjaf/eventstore/postgresql"
 	"github.com/fiatjaf/khatru"
 )

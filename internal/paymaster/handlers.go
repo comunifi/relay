@@ -10,10 +10,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/citizenapp2/relay/internal/db"
-	comm "github.com/citizenapp2/relay/pkg/common"
-	"github.com/citizenapp2/relay/pkg/relay"
 	pay "github.com/citizenwallet/smartcontracts/pkg/contracts/paymaster"
+	"github.com/comunifi/relay/internal/db"
+	comm "github.com/comunifi/relay/pkg/common"
+	"github.com/comunifi/relay/pkg/relay"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"

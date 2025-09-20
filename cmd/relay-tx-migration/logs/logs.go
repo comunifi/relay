@@ -8,10 +8,9 @@ import (
 	"strings"
 	"time"
 
-	eth "github.com/citizenapp2/nostr-eth"
-	"github.com/citizenapp2/relay/internal/db"
-	"github.com/citizenapp2/relay/internal/ethrequest"
-	"github.com/citizenapp2/relay/pkg/relay"
+	nostreth "github.com/comunifi/nostr-eth"
+	"github.com/comunifi/relay/cmd/relay-tx-migration/logs/logdb"
+	"github.com/comunifi/relay/internal/ethrequest"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -88,7 +87,7 @@ func getERC20Decimals(evm *ethrequest.EthService, contractAddress common.Address
 	return decimals, nil
 }
 
-func MigrateLogs(ctx context.Context, evm *ethrequest.EthService, chainID *big.Int, secretKey, pubkey string, db *db.DB, ndb *postgresql.PostgresBackend) error {
+func MigrateLogs(ctx context.Context, evm *ethrequest.EthService, chainID *big.Int, secretKey, pubkey string, db *logdb.DB, ndb *postgresql.PostgresBackend) error {
 	events, err := db.EventDB.GetEvents()
 	if err != nil {
 		return err
@@ -114,10 +113,22 @@ func MigrateLogs(ctx context.Context, evm *ethrequest.EthService, chainID *big.I
 
 			for _, log := range logs {
 
-				log.ChainID = chainID.String()
-				log.Hash = log.GenerateUniqueHash()
+				nostrethLog := &nostreth.Log{
+					Hash:      log.Hash,
+					TxHash:    log.TxHash,
+					ChainID:   chainID.String(),
+					CreatedAt: log.CreatedAt,
+					UpdatedAt: log.UpdatedAt,
+					Nonce:     log.Nonce,
+					Sender:    log.Sender,
+					To:        log.To,
+					Value:     log.Value,
+					Data:      log.Data,
+				}
 
-				ev := convertLogToEvent(secretKey, log)
+				nostrethLog.Hash = nostrethLog.GenerateUniqueHash()
+
+				ev := convertLogToEvent(nostrethLog)
 
 				err = ev.Sign(secretKey)
 				if err != nil {
@@ -142,8 +153,8 @@ func MigrateLogs(ctx context.Context, evm *ethrequest.EthService, chainID *big.I
 	return nil
 }
 
-func convertLogToEvent(secretKey string, log *relay.Log) *nostr.Event {
-	ev, err := eth.CreateTxLogEvent(log, secretKey)
+func convertLogToEvent(log *nostreth.Log) *nostr.Event {
+	ev, err := nostreth.CreateTxLogEvent(*log)
 	if err != nil {
 		fmt.Println("Error creating tx log event:", err)
 		return nil

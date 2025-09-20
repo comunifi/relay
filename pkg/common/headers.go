@@ -3,7 +3,7 @@ package common
 import (
 	"context"
 
-	"github.com/citizenapp2/relay/pkg/relay"
+	"github.com/comunifi/relay/pkg/relay"
 )
 
 // GetContextAddress returns the indexer.ContextKeyAddress from the context

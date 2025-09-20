@@ -3,6 +3,8 @@ package relay
 import (
 	"encoding/json"
 	"fmt"
+
+	nostreth "github.com/merepools/nostr-eth"
 )
 
 type PushToken struct {
@@ -37,17 +39,17 @@ const PushMessageAnonymousBody = "%s %s received"
 const PushMessageTitle = "%s - %s"
 const PushMessageBody = "%s %s received from %s"
 
-func parseDescriptionFromData(data *json.RawMessage) *string {
-	var desc PushDescription
-	err := json.Unmarshal(*data, &desc)
-	if err != nil {
-		return nil
-	}
+// func parseDescriptionFromData(data *json.RawMessage) *string {
+// 	var desc PushDescription
+// 	err := json.Unmarshal(*data, &desc)
+// 	if err != nil {
+// 		return nil
+// 	}
 
-	return &desc.Description
-}
+// 	return &desc.Description
+// }
 
-func NewAnonymousPushMessage(token []*PushToken, community, amount, symbol string, tx *Log) *PushMessage {
+func NewAnonymousPushMessage(token []*PushToken, community, amount, symbol string, tx *nostreth.Log) *PushMessage {
 	mtx, err := json.Marshal(tx)
 	if err != nil {
 		mtx = nil
@@ -55,26 +57,12 @@ func NewAnonymousPushMessage(token []*PushToken, community, amount, symbol strin
 
 	silent := false
 
-	title := ""
-	description := ""
-	switch tx.Status {
-	case LogStatusSending:
-		title = fmt.Sprintf(PushMessageSendingAnonymousTitle, community)
-		description = fmt.Sprintf(PushMessageSendingAnonymousBody, amount, symbol)
-		if descriptionData := parseDescriptionFromData(tx.ExtraData); descriptionData != nil {
-			title = fmt.Sprintf(PushMessageSendingAnonymousDescriptionTitle, amount, community, symbol)
-			description = fmt.Sprintf(PushMessageSendingAnonymousDescriptionBody, *descriptionData)
-		}
-	case LogStatusPending:
-		silent = true
-	case LogStatusSuccess:
-		title = fmt.Sprintf(PushMessageAnonymousTitle, community)
-		description = fmt.Sprintf(PushMessageAnonymousBody, amount, symbol)
-		if descriptionData := parseDescriptionFromData(tx.ExtraData); descriptionData != nil {
-			title = fmt.Sprintf(PushMessageAnonymousDescriptionTitle, amount, community, symbol)
-			description = fmt.Sprintf(PushMessageAnonymousDescriptionBody, *descriptionData)
-		}
-	}
+	title := fmt.Sprintf(PushMessageAnonymousTitle, community)
+	description := fmt.Sprintf(PushMessageAnonymousBody, amount, symbol)
+	// if descriptionData := parseDescriptionFromData(tx.ExtraData); descriptionData != nil {
+	// 	title = fmt.Sprintf(PushMessageAnonymousDescriptionTitle, amount, community, symbol)
+	// 	description = fmt.Sprintf(PushMessageAnonymousDescriptionBody, *descriptionData)
+	// }
 
 	return &PushMessage{
 		Tokens: token,
@@ -85,7 +73,7 @@ func NewAnonymousPushMessage(token []*PushToken, community, amount, symbol strin
 	}
 }
 
-func NewSilentPushMessage(token []*PushToken, tx *Log) *PushMessage {
+func NewSilentPushMessage(token []*PushToken, tx *nostreth.Log) *PushMessage {
 	mtx, err := json.Marshal(tx)
 	if err != nil {
 		mtx = nil

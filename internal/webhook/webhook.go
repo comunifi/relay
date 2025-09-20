@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/citizenapp2/relay/pkg/relay"
+	"github.com/comunifi/relay/pkg/relay"
 )
 
 type Message struct {

@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/citizenapp2/relay/internal/bucket"
-	com "github.com/citizenapp2/relay/pkg/common"
-	"github.com/citizenapp2/relay/pkg/relay"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/profile"
+	"github.com/comunifi/relay/internal/bucket"
+	com "github.com/comunifi/relay/pkg/common"
+	"github.com/comunifi/relay/pkg/relay"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/go-chi/chi/v5"

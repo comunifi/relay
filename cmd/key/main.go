@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/citizenapp2/relay/pkg/common"
+	"github.com/comunifi/relay/pkg/common"
 	"github.com/ethereum/go-ethereum/crypto"
 )
 

@@ -1,10 +1,9 @@
-package db
+package logdb
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"math/big"
 	"regexp"
 	"strings"
@@ -22,9 +21,8 @@ type DB struct {
 	db      *pgxpool.Pool
 	rdb     *pgxpool.Pool
 
-	EventDB     *EventDB
-	SponsorDB   *SponsorDB
-	PushTokenDB map[string]*PushTokenDB
+	EventDB *EventDB
+	LogDB   *LogDB
 }
 
 // NewDB instantiates a new DB
@@ -49,129 +47,24 @@ func NewDB(chainID *big.Int, secret, username, password, dbname, port, host, rho
 		return nil, err
 	}
 
-	sponsorDB, err := NewSponsorDB(ctx, db, db, evname, secret)
-	if err != nil {
-		return nil, err
-	}
-
 	datadb, err := NewDataDB(ctx, db, db, evname)
 	if err != nil {
 		return nil, err
 	}
 
+	logDB, err := NewLogDB(ctx, db, db, evname, datadb)
+	if err != nil {
+		return nil, err
+	}
+
 	d := &DB{
-		ctx:       ctx,
-		chainID:   chainID,
-		db:        db,
-		rdb:       db,
-		EventDB:   eventDB,
-		SponsorDB: sponsorDB,
+		ctx:     ctx,
+		chainID: chainID,
+		db:      db,
+		rdb:     db,
+		EventDB: eventDB,
+		LogDB:   logDB,
 	}
-
-	// check if db exists before opening, since we use rwc mode
-	exists, err := d.EventTableExists(evname)
-	if err != nil {
-		return nil, err
-	}
-
-	if !exists {
-		// create table
-		err = eventDB.CreateEventsTable(evname)
-		if err != nil {
-			return nil, err
-		}
-
-		// create indexes
-		err = eventDB.CreateEventsTableIndexes(evname)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// check if db exists before opening, since we use rwc mode
-	exists, err = d.SponsorTableExists(evname)
-	if err != nil {
-		return nil, err
-	}
-
-	if !exists {
-		// create table
-		err = sponsorDB.CreateSponsorsTable(evname)
-		if err != nil {
-			return nil, err
-		}
-
-		// create indexes
-		err = sponsorDB.CreateSponsorsTableIndexes(evname)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	log.Default().Println("creating data db for: ", evname)
-
-	// check if db exists before opening, since we use rwc mode
-	exists, err = d.DataTableExists(evname)
-	if err != nil {
-		return nil, err
-	}
-
-	if !exists {
-		// create table
-		err = datadb.CreateDataTable()
-		if err != nil {
-			return nil, err
-		}
-
-		// create indexes
-		err = datadb.CreateDataTableIndexes()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	ptdb := map[string]*PushTokenDB{}
-
-	evs, err := eventDB.GetEvents()
-	if err != nil {
-		return nil, err
-	}
-
-	for _, ev := range evs {
-		name, err := d.TableNameSuffix(ev.Contract)
-		if err != nil {
-			return nil, err
-		}
-
-		log.Default().Println("creating push token db for: ", name)
-
-		ptdb[name], err = NewPushTokenDB(ctx, db, db, name)
-		if err != nil {
-			return nil, err
-		}
-
-		// check if db exists before opening, since we use rwc mode
-		exists, err = d.PushTokenTableExists(name)
-		if err != nil {
-			return nil, err
-		}
-
-		if !exists {
-			// create table
-			err = ptdb[name].CreatePushTable()
-			if err != nil {
-				return nil, err
-			}
-
-			// create indexes
-			err = ptdb[name].CreatePushTableIndexes()
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	d.PushTokenDB = ptdb
 
 	return d, nil
 }
@@ -249,49 +142,10 @@ func (d *DB) TableNameSuffix(contract string) (string, error) {
 	return suffix, nil
 }
 
-// GetPushTokenDB returns true if the push token db for the given contract exists, returns the db if it exists
-func (d *DB) GetPushTokenDB(contract string) (*PushTokenDB, bool) {
-	name, err := d.TableNameSuffix(contract)
-	if err != nil {
-		return nil, false
-	}
-
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	ptdb, ok := d.PushTokenDB[name]
-	if !ok {
-		return nil, false
-	}
-	return ptdb, true
-}
-
-// AddPushTokenDB adds a new push token db for the given contract
-func (d *DB) AddPushTokenDB(contract string) (*PushTokenDB, error) {
-	name, err := d.TableNameSuffix(contract)
-	if err != nil {
-		return nil, err
-	}
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if ptdb, ok := d.PushTokenDB[name]; ok {
-		return ptdb, nil
-	}
-	ptdb, err := NewPushTokenDB(d.ctx, d.db, d.rdb, name)
-	if err != nil {
-		return nil, err
-	}
-	d.PushTokenDB[name] = ptdb
-	return ptdb, nil
-}
-
 // Close closes the db and all its transfer and push dbs
 func (d *DB) Close() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-
-	for i := range d.PushTokenDB {
-		delete(d.PushTokenDB, i)
-	}
 
 	d.db.Close()
 	d.rdb.Close()

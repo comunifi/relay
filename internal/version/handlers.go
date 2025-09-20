@@ -3,8 +3,8 @@ package version
 import (
 	"net/http"
 
-	"github.com/citizenapp2/relay/pkg/common"
-	"github.com/citizenapp2/relay/pkg/relay"
+	"github.com/comunifi/relay/pkg/common"
+	"github.com/comunifi/relay/pkg/relay"
 )
 
 type Service struct{}

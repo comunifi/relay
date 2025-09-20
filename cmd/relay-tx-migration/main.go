@@ -7,11 +7,11 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/citizenapp2/relay/cmd/relay-tx-migration/logs"
-	"github.com/citizenapp2/relay/internal/config"
-	"github.com/citizenapp2/relay/internal/db"
-	"github.com/citizenapp2/relay/internal/ethrequest"
-	"github.com/citizenapp2/relay/pkg/common"
+	"github.com/comunifi/relay/cmd/relay-tx-migration/logs"
+	"github.com/comunifi/relay/cmd/relay-tx-migration/logs/logdb"
+	"github.com/comunifi/relay/internal/config"
+	"github.com/comunifi/relay/internal/ethrequest"
+	"github.com/comunifi/relay/pkg/common"
 	"github.com/fiatjaf/eventstore/postgresql"
 	"github.com/fiatjaf/khatru"
 )
@@ -81,7 +81,7 @@ func main() {
 	// db
 	log.Default().Println("starting internal db service...")
 
-	d, err := db.NewDB(chid, conf.DBSecret, conf.DBUser, conf.DBPassword, conf.DBName, conf.DBPort, conf.DBHost, conf.DBReaderHost)
+	d, err := logdb.NewDB(chid, conf.DBSecret, conf.DBUser, conf.DBPassword, conf.DBName, conf.DBPort, conf.DBHost, conf.DBReaderHost)
 	if err != nil {
 		log.Fatal(err)
 	}

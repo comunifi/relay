@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/citizenapp2/relay/pkg/relay"
+	"github.com/comunifi/relay/pkg/relay"
 )
 
 const batchSize = 10 // Size of each batch

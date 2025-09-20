@@ -1,6 +1,6 @@
 package queue
 
-import "github.com/citizenapp2/relay/pkg/relay"
+import "github.com/comunifi/relay/pkg/relay"
 
 type PushService struct{}
 

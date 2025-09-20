@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/citizenapp2/relay/pkg/relay"
+	"github.com/comunifi/relay/pkg/relay"
 	"github.com/ethereum/go-ethereum/common"
 )
 

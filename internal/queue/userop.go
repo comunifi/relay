@@ -9,33 +9,39 @@ import (
 	"sync"
 	"time"
 
-	"github.com/citizenapp2/relay/internal/db"
-	"github.com/citizenapp2/relay/internal/ws"
-	comm "github.com/citizenapp2/relay/pkg/common"
-	"github.com/citizenapp2/relay/pkg/relay"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/tokenEntryPoint"
+	"github.com/comunifi/relay/internal/db"
+	"github.com/comunifi/relay/internal/nostr"
+	"github.com/comunifi/relay/internal/ws"
+	comm "github.com/comunifi/relay/pkg/common"
+	"github.com/comunifi/relay/pkg/relay"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
+	nostreth "github.com/merepools/nostr-eth"
 )
 
 type UserOpService struct {
+	ctx        context.Context
 	inProgress map[common.Address][]string
 	mu         sync.Mutex
 	db         *db.DB
+	n          *nostr.Nostr
 	evm        relay.EVMRequester
 	pushq      *Service
 	pools      *ws.ConnectionPools
 }
 
-func NewUserOpService(db *db.DB,
+func NewUserOpService(ctx context.Context, db *db.DB, n *nostr.Nostr,
 	evm relay.EVMRequester,
 	pushq *Service,
 	pools *ws.ConnectionPools) *UserOpService {
 	return &UserOpService{
+		ctx:        ctx,
 		inProgress: map[common.Address][]string{},
 		db:         db,
+		n:          n,
 		evm:        evm,
 		pushq:      pushq,
 		pools:      pools,
@@ -181,9 +187,8 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 		s.inProgress[sponsor] = append(s.inProgress[sponsor], signedTxHash)
 		s.mu.Unlock()
 
-		insertedLogs := map[common.Address][]*relay.Log{}
+		insertedLogs := map[common.Address][]*nostreth.Log{}
 
-		ldb := s.db.LogDB
 		edb := s.db.EventDB
 
 		events, err := edb.GetEvents()
@@ -229,11 +234,12 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 				continue
 			}
 
-			txdata, ok := txm.ExtraData.(*json.RawMessage)
-			if !ok {
-				// if it's invalid, set it to nil to avoid errors and corrupted json
-				txdata = nil
-			}
+			// TODO: add extra data
+			// txdata, ok := txm.ExtraData.(*json.RawMessage)
+			// if !ok {
+			// 	// if it's invalid, set it to nil to avoid errors and corrupted json
+			// 	txdata = nil
+			// }
 
 			// get destination address from calldata
 			dest, err := comm.ParseDestinationFromCallData(userop.CallData)
@@ -241,7 +247,7 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 				continue
 			}
 
-			log := &relay.Log{
+			log := &nostreth.Log{
 				TxHash:    signedTxHash,
 				CreatedAt: time.Now().UTC(),
 				UpdatedAt: time.Now().UTC(),
@@ -250,19 +256,24 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 				To:        dest.Hex(),
 				Value:     common.Big0,
 				Data:      data,
-				ExtraData: txdata,
-				Status:    relay.LogStatusSending,
 			}
 
 			log.Hash = log.GenerateUniqueHash()
 
-			err = ldb.AddLog(log)
-			if err != nil {
-				println("error adding log", err.Error())
-			}
+			// TODO: not relevant anymore
+			// ev, err := nostreth.CreateTxLogEvent(*log)
+			// if err != nil {
+			// 	println("error creating tx log event", err.Error())
+			// 	continue
+			// }
+
+			// err = s.n.SignAndSaveEvent(s.ctx, ev)
+			// if err != nil {
+			// 	println("error adding log", err.Error())
+			// }
 
 			// broadcast updates to connected clients
-			s.pools.BroadcastMessage(relay.WSMessageTypeNew, log)
+			// s.pools.BroadcastMessage(relay.WSMessageTypeNew, log)
 
 			insertedLogs[txm.Paymaster] = append(insertedLogs[txm.Paymaster], log)
 		}
@@ -274,14 +285,14 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 			e, ok := err.(rpc.Error)
 			if ok && e.ErrorCode() == -32010 {
 				// If the error code is -32010, it means that a tx needs to be replaced
-				for _, logs := range insertedLogs {
-					for _, log := range logs {
-						ldb.RemoveLog(log.Hash)
+				// for _, logs := range insertedLogs {
+				// 	for _, log := range logs {
+				// 		// ldb.RemoveLog(log.Hash)
 
-						// broadcast updates to connected clients
-						s.pools.BroadcastMessage(relay.WSMessageTypeRemove, log)
-					}
-				}
+				// 		// broadcast updates to connected clients
+				// 		// s.pools.BroadcastMessage(relay.WSMessageTypeRemove, log)
+				// 	}
+				// }
 
 				for _, msg := range msgs {
 					txm, ok := msg.Message.(relay.UserOpMessage)
@@ -306,14 +317,14 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 			}
 			if ok && e.ErrorCode() != -32000 {
 				// If it's an RPC error and the error code is not -32000, remove the sending transfer and return the error
-				for _, logs := range insertedLogs {
-					for _, log := range logs {
-						ldb.RemoveLog(log.Hash)
+				// for _, logs := range insertedLogs {
+				// 	for _, log := range logs {
+				// 		ldb.RemoveLog(log.Hash)
 
-						// broadcast updates to connected clients
-						s.pools.BroadcastMessage(relay.WSMessageTypeRemove, log)
-					}
-				}
+				// 		// broadcast updates to connected clients
+				// 		// s.pools.BroadcastMessage(relay.WSMessageTypeRemove, log)
+				// 	}
+				// }
 
 				invalid = append(invalid, msgs...)
 				for range msgs {
@@ -331,14 +342,14 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 
 			if !strings.Contains(e.Error(), "insufficient funds") {
 				// If the error is not about insufficient funds, remove the sending transfer and return the error
-				for _, logs := range insertedLogs {
-					for _, log := range logs {
-						ldb.RemoveLog(log.Hash)
+				// for _, logs := range insertedLogs {
+				// 	for _, log := range logs {
+				// 		ldb.RemoveLog(log.Hash)
 
-						// broadcast updates to connected clients
-						s.pools.BroadcastMessage(relay.WSMessageTypeRemove, log)
-					}
-				}
+				// 		// broadcast updates to connected clients
+				// 		// s.pools.BroadcastMessage(relay.WSMessageTypeRemove, log)
+				// 	}
+				// }
 
 				invalid = append(invalid, msgs...)
 				for range msgs {
@@ -354,15 +365,15 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 				continue
 			}
 
-			for _, logs := range insertedLogs {
-				for _, log := range logs {
-					ldb.SetStatus(log.Hash, string(relay.LogStatusFail))
+			// for _, logs := range insertedLogs {
+			// 	for _, log := range logs {
+			// 		ldb.SetStatus(log.Hash, string(relay.LogStatusFail))
 
-					// broadcast updates to connected clients
-					log.Status = relay.LogStatusFail
-					s.pools.BroadcastMessage(relay.WSMessageTypeUpdate, log)
-				}
-			}
+			// 		// broadcast updates to connected clients
+			// 		log.Status = relay.LogStatusFail
+			// 		s.pools.BroadcastMessage(relay.WSMessageTypeUpdate, log)
+			// 	}
+			// }
 
 			// Return the error about insufficient funds
 			invalid = append(invalid, msgs...)
@@ -384,31 +395,32 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 			msg.Respond(signedTxHash, nil)
 		}
 
-		for _, logs := range insertedLogs {
-			for _, log := range logs {
-				err := ldb.SetStatus(log.Hash, string(relay.LogStatusPending))
-				if err != nil {
-					ldb.RemoveLog(log.Hash)
+		// for _, logs := range insertedLogs {
+		// 	for _, log := range logs {
+		// 		ldb.RemoveLog(log.Hash)
+		// 		// err := ldb.SetStatus(log.Hash, string(relay.LogStatusPending))
+		// 		if err != nil {
+		// 			ldb.RemoveLog(log.Hash)
 
-					// broadcast updates to connected clients
-					s.pools.BroadcastMessage(relay.WSMessageTypeRemove, log)
-				}
-			}
-		}
+		// 			// broadcast updates to connected clients
+		// 			// s.pools.BroadcastMessage(relay.WSMessageTypeRemove, log)
+		// 		}
+		// 	}
+		// }
 
 		go func() {
 			// async wait for the transaction to be mined
 			err = s.evm.WaitForTx(signedTx, 16)
-			if err != nil {
-				for _, logs := range insertedLogs {
-					for _, log := range logs {
-						ldb.RemoveLog(log.Hash)
+			// if err != nil {
+			// 	for _, logs := range insertedLogs {
+			// 		for _, log := range logs {
+			// 			ldb.RemoveLog(log.Hash)
 
-						// broadcast updates to connected clients
-						s.pools.BroadcastMessage(relay.WSMessageTypeRemove, log)
-					}
-				}
-			}
+			// 			// broadcast updates to connected clients
+			// 			// s.pools.BroadcastMessage(relay.WSMessageTypeRemove, log)
+			// 		}
+			// 	}
+			// }
 
 			// remove from inProgress
 			s.mu.Lock()

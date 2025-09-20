@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/citizenapp2/relay/pkg/relay"
+	"github.com/comunifi/relay/pkg/relay"
 )
 
 type ConnectionPools struct {

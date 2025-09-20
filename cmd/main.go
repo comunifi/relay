@@ -7,16 +7,17 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/citizenapp2/relay/internal/api"
-	"github.com/citizenapp2/relay/internal/bucket"
-	"github.com/citizenapp2/relay/internal/config"
-	"github.com/citizenapp2/relay/internal/db"
-	"github.com/citizenapp2/relay/internal/ethrequest"
-	"github.com/citizenapp2/relay/internal/indexer"
-	"github.com/citizenapp2/relay/internal/queue"
-	"github.com/citizenapp2/relay/internal/webhook"
-	"github.com/citizenapp2/relay/internal/ws"
-	"github.com/citizenapp2/relay/pkg/common"
+	"github.com/comunifi/relay/internal/api"
+	"github.com/comunifi/relay/internal/bucket"
+	"github.com/comunifi/relay/internal/config"
+	"github.com/comunifi/relay/internal/db"
+	"github.com/comunifi/relay/internal/ethrequest"
+	"github.com/comunifi/relay/internal/indexer"
+	"github.com/comunifi/relay/internal/nostr"
+	"github.com/comunifi/relay/internal/queue"
+	"github.com/comunifi/relay/internal/webhook"
+	"github.com/comunifi/relay/internal/ws"
+	"github.com/comunifi/relay/pkg/common"
 	"github.com/fiatjaf/eventstore/postgresql"
 	"github.com/fiatjaf/khatru"
 )
@@ -87,6 +88,8 @@ func main() {
 		log.Fatal(err)
 	}
 	defer ndb.Close()
+
+	n := nostr.NewNostr(conf.RelayPrivateKey, &ndb)
 	////////////////////
 
 	////////////////////
@@ -156,7 +159,7 @@ func main() {
 	if !*noindex {
 		log.Default().Println("starting indexer service...")
 
-		idx := indexer.NewIndexer(ctx, conf.RelayPrivateKey, d, &ndb, evm, pools)
+		idx := indexer.NewIndexer(ctx, conf.RelayPrivateKey, chid, d, &ndb, evm, pools)
 		go func() {
 			quitAck <- idx.Start()
 		}()
@@ -167,7 +170,7 @@ func main() {
 	// userop queue
 	log.Default().Println("starting userop queue service...")
 
-	op := queue.NewUserOpService(d, evm, pushqueue, pools)
+	op := queue.NewUserOpService(ctx, d, n, evm, pushqueue, pools)
 
 	useropq, qerr := queue.NewService("userop", 3, *useropqbf, ctx)
 	defer useropq.Close()

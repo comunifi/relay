@@ -1,4 +1,4 @@
-package relay
+package logdb
 
 import (
 	"bytes"

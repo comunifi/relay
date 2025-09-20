@@ -1,18 +1,16 @@
 package api
 
 import (
-	"github.com/citizenapp2/relay/internal/accounts"
-	"github.com/citizenapp2/relay/internal/bucket"
-	"github.com/citizenapp2/relay/internal/chain"
-	"github.com/citizenapp2/relay/internal/events"
-	"github.com/citizenapp2/relay/internal/logs"
-	"github.com/citizenapp2/relay/internal/paymaster"
-	"github.com/citizenapp2/relay/internal/profiles"
-	"github.com/citizenapp2/relay/internal/push"
-	"github.com/citizenapp2/relay/internal/rpc"
-	"github.com/citizenapp2/relay/internal/userop"
-	"github.com/citizenapp2/relay/internal/version"
-	"github.com/citizenapp2/relay/pkg/relay"
+	"github.com/comunifi/relay/internal/accounts"
+	"github.com/comunifi/relay/internal/bucket"
+	"github.com/comunifi/relay/internal/chain"
+	"github.com/comunifi/relay/internal/paymaster"
+	"github.com/comunifi/relay/internal/profiles"
+	"github.com/comunifi/relay/internal/push"
+	"github.com/comunifi/relay/internal/rpc"
+	"github.com/comunifi/relay/internal/userop"
+	"github.com/comunifi/relay/internal/version"
+	"github.com/comunifi/relay/pkg/relay"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -41,8 +39,6 @@ func (s *Server) AddMiddleware(cr *chi.Mux) *chi.Mux {
 func (s *Server) AddRoutes(cr *chi.Mux, b *bucket.Bucket) *chi.Mux {
 	// instantiate handlers
 	v := version.NewService()
-	l := logs.NewService(s.chainID, s.db, s.evm)
-	events := events.NewHandlers(s.db, s.pools)
 	rpc := rpc.NewHandlers()
 	pm := paymaster.NewService(s.evm, s.db)
 	uop := userop.NewService(s.evm, s.db, s.userOpQueue, s.chainID)
@@ -55,11 +51,6 @@ func (s *Server) AddRoutes(cr *chi.Mux, b *bucket.Bucket) *chi.Mux {
 	cr.Route("/version", func(cr chi.Router) {
 		cr.Get("/", v.Current)
 	})
-
-	// cr.Route("/legacy", func(cr chi.Router) {
-	// 	// TODO: implement legacy routes
-	// 	cr.Get("/account/{address}/exists", l.Get)
-	// })
 
 	cr.Route("/v1", func(cr chi.Router) {
 		// accounts
@@ -82,19 +73,6 @@ func (s *Server) AddRoutes(cr *chi.Mux, b *bucket.Bucket) *chi.Mux {
 			cr.Delete("/{acc_addr}/{token}", withSignature(s.evm, pu.RemoveAccountToken))
 		})
 
-		// logs
-		cr.Route("/logs/{contract_address}", func(cr chi.Router) {
-			cr.Route("/{topic}", func(cr chi.Router) {
-				cr.Get("/", l.Get)
-				cr.Get("/all", l.GetAll)
-
-				cr.Get("/new", l.GetNew)
-				cr.Get("/new/all", l.GetAllNew)
-			})
-
-			cr.Get("/tx/{hash}", l.GetSingle)
-		})
-
 		// rpc
 		cr.Route("/rpc/{pm_address}", func(cr chi.Router) {
 			cr.Post("/", withJSONRPCRequest(map[string]relay.RPCHandlerFunc{
@@ -114,8 +92,7 @@ func (s *Server) AddRoutes(cr *chi.Mux, b *bucket.Bucket) *chi.Mux {
 			}))
 		})
 
-		cr.Get("/events/{contract}/{topic}", events.HandleConnection) // for listening to events
-		cr.Get("/rpc", rpc.HandleConnection)                          // for sending RPC calls
+		cr.Get("/rpc", rpc.HandleConnection) // for sending RPC calls
 	})
 
 	return cr

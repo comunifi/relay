@@ -3,10 +3,11 @@ package indexer
 import (
 	"context"
 	"errors"
+	"math/big"
 
-	"github.com/citizenapp2/relay/internal/db"
-	"github.com/citizenapp2/relay/internal/ws"
-	"github.com/citizenapp2/relay/pkg/relay"
+	"github.com/comunifi/relay/internal/db"
+	"github.com/comunifi/relay/internal/ws"
+	"github.com/comunifi/relay/pkg/relay"
 	"github.com/fiatjaf/eventstore/postgresql"
 )
 
@@ -19,6 +20,7 @@ var (
 type Indexer struct {
 	ctx       context.Context
 	secretKey string
+	chainID   *big.Int
 
 	db  *db.DB
 	ndb *postgresql.PostgresBackend
@@ -27,8 +29,8 @@ type Indexer struct {
 	pools *ws.ConnectionPools
 }
 
-func NewIndexer(ctx context.Context, secretKey string, db *db.DB, ndb *postgresql.PostgresBackend, evm relay.EVMRequester, pools *ws.ConnectionPools) *Indexer {
-	return &Indexer{ctx: ctx, secretKey: secretKey, db: db, ndb: ndb, evm: evm, pools: pools}
+func NewIndexer(ctx context.Context, secretKey string, chainID *big.Int, db *db.DB, ndb *postgresql.PostgresBackend, evm relay.EVMRequester, pools *ws.ConnectionPools) *Indexer {
+	return &Indexer{ctx: ctx, secretKey: secretKey, chainID: chainID, db: db, ndb: ndb, evm: evm, pools: pools}
 }
 
 func (i *Indexer) Start() error {

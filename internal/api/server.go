@@ -6,10 +6,10 @@ import (
 	"math/big"
 	"net/http"
 
-	"github.com/citizenapp2/relay/internal/db"
-	"github.com/citizenapp2/relay/internal/queue"
-	"github.com/citizenapp2/relay/internal/ws"
-	"github.com/citizenapp2/relay/pkg/relay"
+	"github.com/comunifi/relay/internal/db"
+	"github.com/comunifi/relay/internal/queue"
+	"github.com/comunifi/relay/internal/ws"
+	"github.com/comunifi/relay/pkg/relay"
 )
 
 type Server struct {

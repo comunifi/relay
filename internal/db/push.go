@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/citizenapp2/relay/pkg/common"
-	"github.com/citizenapp2/relay/pkg/relay"
+	"github.com/comunifi/relay/pkg/common"
+	"github.com/comunifi/relay/pkg/relay"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

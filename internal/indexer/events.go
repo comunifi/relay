@@ -6,14 +6,14 @@ import (
 	"math/big"
 	"time"
 
-	eth "github.com/citizenapp2/nostr-eth"
+	nostreth "github.com/comunifi/nostr-eth"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 
-	comm "github.com/citizenapp2/relay/pkg/common"
-	"github.com/citizenapp2/relay/pkg/relay"
+	comm "github.com/comunifi/relay/pkg/common"
+	"github.com/comunifi/relay/pkg/relay"
 )
 
 type block struct {
@@ -80,21 +80,20 @@ func (i *Indexer) ListenToLogs(ev *relay.Event, quitAck chan error) error {
 			return err
 		}
 
-		l := &relay.Log{
+		l := &nostreth.Log{
 			TxHash:    log.TxHash.Hex(),
+			ChainID:   i.chainID.String(),
 			CreatedAt: time.Unix(int64(blk.Time), 0).UTC(),
 			UpdatedAt: time.Now().UTC(),
 			Nonce:     int64(0),
 			To:        log.Address.Hex(),
 			Value:     big.NewInt(0), // Set to 0 as we don't have this information from the log
 			Data:      (*json.RawMessage)(&b),
-			ExtraData: nil,                    // Set to nil as we don't have extra data
-			Status:    relay.LogStatusSuccess, // Assuming a default status of Pending
 		}
 
 		l.Hash = l.GenerateUniqueHash()
 
-		ev, err := eth.CreateTxLogEvent(l, i.secretKey)
+		ev, err := nostreth.CreateTxLogEvent(*l)
 		if err != nil {
 			fmt.Println("Error creating tx log event:", err)
 			return nil
@@ -110,7 +109,7 @@ func (i *Indexer) ListenToLogs(ev *relay.Event, quitAck chan error) error {
 			return err
 		}
 
-		i.pools.BroadcastMessage(relay.WSMessageTypeUpdate, l)
+		// i.pools.BroadcastMessage(relay.WSMessageTypeUpdate, l)
 	}
 
 	return nil
