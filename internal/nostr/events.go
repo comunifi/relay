@@ -1,6 +1,7 @@
 package nostr
 
 import (
+	nostreth "github.com/comunifi/nostr-eth"
 	"github.com/nbd-wtf/go-nostr"
 )
 
@@ -33,15 +34,15 @@ func (n *Nostr) GetMentionEvent(id string) (*nostr.Event, error) {
 		AND EXISTS (
 			SELECT 1
 			FROM jsonb_array_elements(tags) AS tag
-			WHERE tag->>0 = 'e' AND tag->>1 = $1
+			WHERE tag->>0 = 'q' AND tag->>1 = $1
 		)
 		AND EXISTS (
 			SELECT 1
 			FROM jsonb_array_elements(tags) AS tag
-			WHERE tag->>0 = 't' AND tag->>1 = 'mention'
+			WHERE tag->>0 = 'k' AND tag->>1 = $2
 		)
 		LIMIT 1
-	`, id)
+	`, id, nostreth.KindTxLog)
 
 	var event nostr.Event
 
@@ -49,6 +50,8 @@ func (n *Nostr) GetMentionEvent(id string) (*nostr.Event, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	event.Content = removeNostrUris(event.Content)
 
 	return &event, nil
 }

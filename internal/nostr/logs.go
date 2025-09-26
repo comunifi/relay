@@ -1,6 +1,7 @@
 package nostr
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -65,6 +66,10 @@ func (n *Nostr) GetLog(hash, chainID string) (*relay.LegacyLog, error) {
 	// v1 requires the message as extra data, attempt to find a message
 	mentionEvent, err := n.GetMentionEvent(id)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return &log, nil
+		}
+
 		return nil, err
 	}
 

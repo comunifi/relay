@@ -90,6 +90,8 @@ github.com/comunifi/nostr-eth v0.0.19 h1:2NHvTSkL7F9IAKqNnGBnRaiPiJdZAvZgKM7Zv1R
 github.com/comunifi/nostr-eth v0.0.19/go.mod h1:0znLOgSO4pDJxPf5Zfxs5Ivi4jvzyRXwfXMBDT5rUPc=
 github.com/comunifi/nostr-eth v0.0.20 h1:6B8i07Hxw7xWnq2Mlkax+fGZnWNf8VuIdLcn0c2LSCI=
 github.com/comunifi/nostr-eth v0.0.20/go.mod h1:0znLOgSO4pDJxPf5Zfxs5Ivi4jvzyRXwfXMBDT5rUPc=
+github.com/comunifi/nostr-eth v0.0.21 h1:ScLySHraCE1So+5S4MSKj7wuwAPceGOkxpk8WeL0EQ0=
+github.com/comunifi/nostr-eth v0.0.21/go.mod h1:0znLOgSO4pDJxPf5Zfxs5Ivi4jvzyRXwfXMBDT5rUPc=
 github.com/consensys/bavard v0.1.13 h1:oLhMLOFGTLdlda/kma4VOJazblc7IM5y5QPd2A/YjhQ=
 github.com/consensys/bavard v0.1.13/go.mod h1:9ItSMtA/dXMAiL7BG6bqW2m3NdSEObYWoH223nGHukI=
 github.com/consensys/bavard v0.1.31-0.20250406004941-2db259e4b582 h1:dTlIwEdFQmldzFf5F6bbTcYWhvnAgZai2g8eq3Wwxqg=
