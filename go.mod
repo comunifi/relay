@@ -4,7 +4,7 @@ go 1.24.6
 
 require (
 	github.com/citizenwallet/smartcontracts v0.0.110
-	github.com/comunifi/nostr-eth v0.0.11
+	github.com/comunifi/nostr-eth v0.0.20
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0
 	github.com/ethereum/go-ethereum v1.16.3
 	github.com/fiatjaf/eventstore v0.16.2
@@ -29,6 +29,7 @@ require (
 	github.com/bits-and-blooms/bitset v1.20.0 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4 // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0 // indirect
+	github.com/btcsuite/btcutil v1.0.2 // indirect
 	github.com/bytedance/sonic v1.13.2 // indirect
 	github.com/bytedance/sonic/loader v0.2.4 // indirect
 	github.com/cloudwego/base64x v0.1.5 // indirect

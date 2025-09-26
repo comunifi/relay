@@ -1,4 +1,4 @@
-package logdb
+package relay
 
 import (
 	"bytes"
@@ -14,37 +14,36 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-type LogStatus string
+type LegacyLogStatus string
 
 const (
-	LogStatusUnknown LogStatus = ""
-	LogStatusSending LogStatus = "sending"
-	LogStatusPending LogStatus = "pending"
-	LogStatusSuccess LogStatus = "success"
-	LogStatusFail    LogStatus = "fail"
+	LegacyLogStatusUnknown LegacyLogStatus = ""
+	LegacyLogStatusSending LegacyLogStatus = "sending"
+	LegacyLogStatusPending LegacyLogStatus = "pending"
+	LegacyLogStatusSuccess LegacyLogStatus = "success"
+	LegacyLogStatusFail    LegacyLogStatus = "fail"
 
 	TEMP_HASH_PREFIX = "TEMP_HASH"
 )
 
-func LogStatusFromString(s string) (LogStatus, error) {
+func LegacyLogStatusFromString(s string) (LegacyLogStatus, error) {
 	switch s {
 	case "sending":
-		return LogStatusSending, nil
+		return LegacyLogStatusSending, nil
 	case "pending":
-		return LogStatusPending, nil
+		return LegacyLogStatusPending, nil
 	case "success":
-		return LogStatusSuccess, nil
+		return LegacyLogStatusSuccess, nil
 	case "fail":
-		return LogStatusFail, nil
+		return LegacyLogStatusFail, nil
 	}
 
-	return LogStatusUnknown, errors.New("unknown role: " + s)
+	return LegacyLogStatusUnknown, errors.New("unknown role: " + s)
 }
 
-type Log struct {
+type LegacyLog struct {
 	Hash      string           `json:"hash"`
 	TxHash    string           `json:"tx_hash"`
-	ChainID   string           `json:"chain_id"`
 	CreatedAt time.Time        `json:"created_at"`
 	UpdatedAt time.Time        `json:"updated_at"`
 	Nonce     int64            `json:"nonce"`
@@ -53,18 +52,15 @@ type Log struct {
 	Value     *big.Int         `json:"value"`
 	Data      *json.RawMessage `json:"data"`
 	ExtraData *json.RawMessage `json:"extra_data"`
-	Status    LogStatus        `json:"status"`
+	Status    LegacyLogStatus  `json:"status"`
 }
 
-type LogTransferData struct {
-	To    string `json:"to"`
-	From  string `json:"from"`
-	Topic string `json:"topic"`
-	Value string `json:"value"`
+type ExtraData struct {
+	Description string `json:"description"`
 }
 
 // generate hash for transfer using a provided index, from, to and the tx hash
-func (t *Log) GenerateUniqueHash() string {
+func (t *LegacyLog) GenerateUniqueHash() string {
 	buf := new(bytes.Buffer)
 
 	// Write each value to the buffer as bytes
@@ -76,13 +72,12 @@ func (t *Log) GenerateUniqueHash() string {
 	}
 
 	buf.Write(common.FromHex(t.TxHash))
-	buf.Write(common.FromHex(t.ChainID))
 
 	hash := crypto.Keccak256Hash(buf.Bytes())
 	return hash.Hex()
 }
 
-func (t *Log) ToRounded(decimals int64) float64 {
+func (t *LegacyLog) ToRounded(decimals int64) float64 {
 	v, _ := t.Value.Float64()
 
 	if decimals == 0 {
@@ -98,11 +93,10 @@ func (t *Log) ToRounded(decimals int64) float64 {
 }
 
 // Update updates the transfer using the given transfer
-func (t *Log) Update(tx *Log) {
+func (t *LegacyLog) Update(tx *LegacyLog) {
 	// update all fields
 	t.Hash = tx.Hash
 	t.TxHash = tx.TxHash
-	t.ChainID = tx.ChainID
 	t.CreatedAt = tx.CreatedAt
 	t.UpdatedAt = time.Now()
 	t.Nonce = tx.Nonce
@@ -114,7 +108,7 @@ func (t *Log) Update(tx *Log) {
 	t.Status = tx.Status
 }
 
-func (t *Log) GetPoolTopic() *string {
+func (t *LegacyLog) GetPoolTopic() *string {
 	if t.Data == nil {
 		return nil
 	}
@@ -134,7 +128,7 @@ func (t *Log) GetPoolTopic() *string {
 }
 
 // Convert a log to json bytes
-func (t *Log) ToJSON() []byte {
+func (t *LegacyLog) ToJSON() []byte {
 	b, err := json.Marshal(t)
 	if err != nil {
 		return nil

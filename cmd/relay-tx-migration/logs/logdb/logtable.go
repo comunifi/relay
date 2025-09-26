@@ -139,7 +139,7 @@ func (db *LogDB) CreateLogTableIndexes() error {
 }
 
 // AddLog adds a log dest the db
-func (db *LogDB) AddLog(lg *Log) error {
+func (db *LogDB) AddLog(lg *relay.LegacyLog) error {
 
 	// start transaction
 	tx, err := db.db.BeginTx(db.ctx, pgx.TxOptions{
@@ -190,7 +190,7 @@ func (db *LogDB) AddLog(lg *Log) error {
 }
 
 // AddLogs adds a list of logs dest the db
-func (db *LogDB) AddLogs(lg []*Log) error {
+func (db *LogDB) AddLogs(lg []*relay.LegacyLog) error {
 	// start transaction
 	tx, err := db.db.BeginTx(db.ctx, pgx.TxOptions{
 		IsoLevel:       pgx.ReadCommitted,
@@ -282,8 +282,8 @@ func (db *LogDB) RemoveOldInProgressLogs() error {
 }
 
 // GetLog returns the log for a given hash
-func (db *LogDB) GetLog(hash string) (*Log, error) {
-	var log Log
+func (db *LogDB) GetLog(hash string) (*relay.LegacyLog, error) {
+	var log relay.LegacyLog
 	var value string
 	var extraData *json.RawMessage
 
@@ -307,8 +307,8 @@ func (db *LogDB) GetLog(hash string) (*Log, error) {
 }
 
 // GetAllPaginatedLogs returns the logs paginated
-func (db *LogDB) GetAllPaginatedLogs(contract string, topic string, maxDate time.Time, limit, offset int) ([]*Log, error) {
-	logs := []*Log{}
+func (db *LogDB) GetAllPaginatedLogs(contract string, topic string, maxDate time.Time, limit, offset int) ([]*relay.LegacyLog, error) {
+	logs := []*relay.LegacyLog{}
 
 	query := fmt.Sprintf(`
 	SELECT l.hash, l.tx_hash, l.created_at, l.updated_at, l.nonce, l.sender, l.dest, l.value, l.data, l.status, d.data as extra_data
@@ -332,7 +332,7 @@ func (db *LogDB) GetAllPaginatedLogs(contract string, topic string, maxDate time
 	defer rows.Close()
 
 	for rows.Next() {
-		var log Log
+		var log relay.LegacyLog
 		var value string
 		var extraData *json.RawMessage
 
@@ -352,8 +352,8 @@ func (db *LogDB) GetAllPaginatedLogs(contract string, topic string, maxDate time
 }
 
 // GetPaginatedLogs returns the logs for a given from_addr or to_addr paginated
-func (db *LogDB) GetPaginatedLogs(contract string, topic string, maxDate time.Time, dataFilters, dataFilters2 map[string]any, limit, offset int) ([]*Log, error) {
-	logs := []*Log{}
+func (db *LogDB) GetPaginatedLogs(contract string, topic string, maxDate time.Time, dataFilters, dataFilters2 map[string]any, limit, offset int) ([]*relay.LegacyLog, error) {
+	logs := []*relay.LegacyLog{}
 
 	query := fmt.Sprintf(`
 		SELECT l.hash, l.tx_hash, l.created_at, l.updated_at, l.nonce, l.sender, l.dest, l.value, l.data, l.status, d.data as extra_data
@@ -419,7 +419,7 @@ func (db *LogDB) GetPaginatedLogs(contract string, topic string, maxDate time.Ti
 	defer rows.Close()
 
 	for rows.Next() {
-		var log Log
+		var log relay.LegacyLog
 		var value string
 		var extraData *json.RawMessage
 
@@ -439,8 +439,8 @@ func (db *LogDB) GetPaginatedLogs(contract string, topic string, maxDate time.Ti
 }
 
 // GetAllNewLogs returns the logs for a given from_addr or to_addr from a given date
-func (db *LogDB) GetAllNewLogs(contract string, topic string, fromDate time.Time, limit, offset int) ([]*Log, error) {
-	logs := []*Log{}
+func (db *LogDB) GetAllNewLogs(contract string, topic string, fromDate time.Time, limit, offset int) ([]*relay.LegacyLog, error) {
+	logs := []*relay.LegacyLog{}
 
 	query := fmt.Sprintf(`
 		SELECT l.hash, l.tx_hash, l.created_at, l.nonce, l.sender, l.dest, l.value, l.data, l.status, d.data as extra_data
@@ -471,7 +471,7 @@ func (db *LogDB) GetAllNewLogs(contract string, topic string, fromDate time.Time
 	defer rows.Close()
 
 	for rows.Next() {
-		var log Log
+		var log relay.LegacyLog
 		var value string
 		var extraData *json.RawMessage
 
@@ -491,8 +491,8 @@ func (db *LogDB) GetAllNewLogs(contract string, topic string, fromDate time.Time
 }
 
 // GetNewLogs returns the logs for a given from_addr or to_addr from a given date
-func (db *LogDB) GetNewLogs(contract string, topic string, fromDate time.Time, dataFilters, dataFilters2 map[string]any, limit, offset int) ([]*Log, error) {
-	logs := []*Log{}
+func (db *LogDB) GetNewLogs(contract string, topic string, fromDate time.Time, dataFilters, dataFilters2 map[string]any, limit, offset int) ([]*relay.LegacyLog, error) {
+	logs := []*relay.LegacyLog{}
 
 	query := fmt.Sprintf(`
 		SELECT l.hash, l.tx_hash, l.created_at, l.nonce, l.sender, l.dest, l.value, l.data, l.status, d.data as extra_data
@@ -557,7 +557,7 @@ func (db *LogDB) GetNewLogs(contract string, topic string, fromDate time.Time, d
 	defer rows.Close()
 
 	for rows.Next() {
-		var log Log
+		var log relay.LegacyLog
 		var value string
 		var extraData *json.RawMessage
 
@@ -577,7 +577,7 @@ func (db *LogDB) GetNewLogs(contract string, topic string, fromDate time.Time, d
 }
 
 // UpdateLogsWithDB returns the logs with data updated from the db
-func (db *LogDB) UpdateLogsWithDB(txs []*Log) ([]*Log, error) {
+func (db *LogDB) UpdateLogsWithDB(txs []*relay.LegacyLog) ([]*relay.LegacyLog, error) {
 	if len(txs) == 0 {
 		return txs, nil
 	}
@@ -613,13 +613,13 @@ func (db *LogDB) UpdateLogsWithDB(txs []*Log) ([]*Log, error) {
 	}
 	defer rows.Close()
 
-	mtxs := map[string]*Log{}
+	mtxs := map[string]*relay.LegacyLog{}
 	for _, lg := range txs {
 		mtxs[lg.Hash] = lg
 	}
 
 	for rows.Next() {
-		var log Log
+		var log relay.LegacyLog
 		var value string
 		var extraData *json.RawMessage
 

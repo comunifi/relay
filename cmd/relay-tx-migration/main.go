@@ -11,6 +11,7 @@ import (
 	"github.com/comunifi/relay/cmd/relay-tx-migration/logs/logdb"
 	"github.com/comunifi/relay/internal/config"
 	"github.com/comunifi/relay/internal/ethrequest"
+	nost "github.com/comunifi/relay/internal/nostr"
 	"github.com/comunifi/relay/pkg/common"
 	"github.com/fiatjaf/eventstore/postgresql"
 	"github.com/fiatjaf/khatru"
@@ -21,17 +22,9 @@ func main() {
 
 	////////////////////
 	// flags
-	// port := flag.Int("port", 3001, "port to listen on")
+	group := flag.String("group", "", "group to use for filtering logs")
 
 	env := flag.String("env", ".env", "path to .env file")
-
-	// polling := flag.Bool("polling", false, "enable polling")
-
-	// noindex := flag.Bool("noindex", false, "disable indexing")
-
-	// useropqbf := flag.Int("buffer", 1000, "userop queue buffer size (default: 1000)")
-
-	// notify := flag.Bool("notify", false, "enable webhook notifications")
 
 	flag.Parse()
 	////////////////////
@@ -76,6 +69,8 @@ func main() {
 		log.Fatal(err)
 	}
 	defer ndb.Close()
+
+	n := nost.NewNostr(conf.RelayPrivateKey, &ndb, conf.RelayUrl)
 	////////////////////
 	////////////////////
 	// db
@@ -110,7 +105,7 @@ func main() {
 	relay.DeleteEvent = append(relay.DeleteEvent, ndb.DeleteEvent)
 	relay.ReplaceEvent = append(relay.ReplaceEvent, ndb.ReplaceEvent)
 
-	err = logs.MigrateLogs(ctx, evm, chid, conf.RelayPrivateKey, pubkey, d, &ndb)
+	err = logs.MigrateLogs(ctx, evm, chid, group, conf.RelayPrivateKey, pubkey, d, n)
 	if err != nil {
 		log.Fatal(err)
 	}

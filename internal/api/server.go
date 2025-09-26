@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/comunifi/relay/internal/db"
+	"github.com/comunifi/relay/internal/nostr"
 	"github.com/comunifi/relay/internal/queue"
 	"github.com/comunifi/relay/internal/ws"
 	"github.com/comunifi/relay/pkg/relay"
@@ -15,13 +16,14 @@ import (
 type Server struct {
 	chainID     *big.Int
 	db          *db.DB
+	n           *nostr.Nostr
 	evm         relay.EVMRequester
 	userOpQueue *queue.Service
 	pools       *ws.ConnectionPools
 }
 
-func NewServer(chainID *big.Int, db *db.DB, evm relay.EVMRequester, userOpQueue *queue.Service, pools *ws.ConnectionPools) *Server {
-	return &Server{chainID: chainID, db: db, evm: evm, userOpQueue: userOpQueue, pools: pools}
+func NewServer(chainID *big.Int, db *db.DB, n *nostr.Nostr, evm relay.EVMRequester, userOpQueue *queue.Service, pools *ws.ConnectionPools) *Server {
+	return &Server{chainID: chainID, db: db, n: n, evm: evm, userOpQueue: userOpQueue, pools: pools}
 }
 
 func (s *Server) Start(port int, handler http.Handler) error {

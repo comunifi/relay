@@ -89,7 +89,7 @@ func main() {
 	}
 	defer ndb.Close()
 
-	n := nostr.NewNostr(conf.RelayPrivateKey, &ndb)
+	n := nostr.NewNostr(conf.RelayPrivateKey, &ndb, conf.RelayUrl)
 	////////////////////
 
 	////////////////////
@@ -190,7 +190,7 @@ func main() {
 
 	////////////////////
 	// api
-	s := api.NewServer(chid, d, evm, useropq, pools)
+	s := api.NewServer(chid, d, n, evm, useropq, pools)
 
 	bu := bucket.NewBucket(conf.PinataBaseURL, conf.PinataAPIKey, conf.PinataAPISecret)
 

@@ -9,6 +9,7 @@ import (
 )
 
 type Config struct {
+	RelayUrl             string `env:"RELAY_URL,required"`
 	ChainName            string `env:"CHAIN_NAME,required"`
 	RPCURL               string `env:"RPC_URL,required"`
 	RPCWSURL             string `env:"RPC_WS_URL,required"`

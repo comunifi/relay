@@ -2,6 +2,7 @@ package logs
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
@@ -11,11 +12,12 @@ import (
 	nostreth "github.com/comunifi/nostr-eth"
 	"github.com/comunifi/relay/cmd/relay-tx-migration/logs/logdb"
 	"github.com/comunifi/relay/internal/ethrequest"
+	"github.com/comunifi/relay/pkg/relay"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 
-	"github.com/fiatjaf/eventstore/postgresql"
+	nost "github.com/comunifi/relay/internal/nostr"
 	"github.com/nbd-wtf/go-nostr"
 )
 
@@ -87,7 +89,7 @@ func getERC20Decimals(evm *ethrequest.EthService, contractAddress common.Address
 	return decimals, nil
 }
 
-func MigrateLogs(ctx context.Context, evm *ethrequest.EthService, chainID *big.Int, secretKey, pubkey string, db *logdb.DB, ndb *postgresql.PostgresBackend) error {
+func MigrateLogs(ctx context.Context, evm *ethrequest.EthService, chainID *big.Int, group *string, secretKey, pubkey string, db *logdb.DB, n *nost.Nostr) error {
 	events, err := db.EventDB.GetEvents()
 	if err != nil {
 		return err
@@ -130,14 +132,27 @@ func MigrateLogs(ctx context.Context, evm *ethrequest.EthService, chainID *big.I
 
 				ev := convertLogToEvent(nostrethLog)
 
-				err = ev.Sign(secretKey)
-				if err != nil {
+				sev, err := n.SignAndSaveEvent(ctx, ev)
+				if err != nil && !strings.Contains(err.Error(), "event already exists") {
 					return err
 				}
 
-				err = ndb.SaveEvent(ctx, ev)
-				if err != nil {
-					return err
+				if log.ExtraData != nil {
+					var extraData relay.ExtraData
+					err = json.Unmarshal(*log.ExtraData, &extraData)
+					if err != nil {
+						return err
+					}
+
+					nostrethMention, err := nostreth.CreateQuoteRepostEvent(extraData.Description, group, sev, n.RelayUrl)
+					if err != nil {
+						return err
+					}
+
+					_, err = n.SignAndSaveEvent(ctx, nostrethMention)
+					if err != nil && !strings.Contains(err.Error(), "event already exists") {
+						return err
+					}
 				}
 			}
 

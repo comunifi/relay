@@ -4,6 +4,7 @@ import (
 	"github.com/comunifi/relay/internal/accounts"
 	"github.com/comunifi/relay/internal/bucket"
 	"github.com/comunifi/relay/internal/chain"
+	"github.com/comunifi/relay/internal/legacylogs"
 	"github.com/comunifi/relay/internal/paymaster"
 	"github.com/comunifi/relay/internal/profiles"
 	"github.com/comunifi/relay/internal/push"
@@ -45,6 +46,7 @@ func (s *Server) AddRoutes(cr *chi.Mux, b *bucket.Bucket) *chi.Mux {
 	ch := chain.NewService(s.evm, s.chainID)
 	pr := profiles.NewService(b, s.evm)
 	pu := push.NewService(s.db)
+	l := legacylogs.NewService(s.chainID, s.n, s.evm)
 	acc := accounts.NewService(s.evm, s.db)
 
 	// configure routes
@@ -71,6 +73,19 @@ func (s *Server) AddRoutes(cr *chi.Mux, b *bucket.Bucket) *chi.Mux {
 		cr.Route("/push/{contract_address}", func(cr chi.Router) {
 			cr.Put("/{acc_addr}", withSignature(s.evm, pu.AddToken))
 			cr.Delete("/{acc_addr}/{token}", withSignature(s.evm, pu.RemoveAccountToken))
+		})
+
+		// logs
+		cr.Route("/logs/{contract_address}", func(cr chi.Router) {
+			cr.Route("/{topic}", func(cr chi.Router) {
+				cr.Get("/", l.Get)
+				cr.Get("/all", l.GetAll)
+
+				cr.Get("/new", l.GetNew)
+				cr.Get("/new/all", l.GetAllNew)
+			})
+
+			cr.Get("/tx/{hash}", l.GetSingle)
 		})
 
 		// rpc
