@@ -109,7 +109,20 @@ func (i *Indexer) ListenToLogs(ev *relay.Event, quitAck chan error) error {
 			return err
 		}
 
-		// i.pools.BroadcastMessage(relay.WSMessageTypeUpdate, l)
+		llog := &relay.LegacyLog{
+			Hash:      l.Hash,
+			TxHash:    l.TxHash,
+			CreatedAt: l.CreatedAt,
+			UpdatedAt: l.UpdatedAt,
+			Nonce:     l.Nonce,
+			Sender:    l.Sender,
+			To:        l.To,
+			Value:     l.Value,
+			Data:      l.Data,
+			Status:    relay.LegacyLogStatusSuccess,
+		}
+
+		i.pools.BroadcastMessage(relay.WSMessageTypeUpdate, llog)
 	}
 
 	return nil

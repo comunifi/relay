@@ -7,6 +7,7 @@ import (
 
 	"github.com/comunifi/relay/internal/db"
 	"github.com/comunifi/relay/internal/ws"
+	"github.com/comunifi/relay/pkg/common"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -30,7 +31,7 @@ func (h *Handlers) HandleConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	exists, err := h.db.EventDB.EventExists(contract)
+	exists, err := h.db.EventDB.EventExists(common.ChecksumAddress(contract))
 	if err != nil || !exists {
 		http.Error(w, "event does not exist", http.StatusNotFound)
 		return
