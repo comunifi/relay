@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	nostreth "github.com/merepools/nostr-eth"
+	nostreth "github.com/comunifi/nostr-eth"
 )
 
 type PushToken struct {

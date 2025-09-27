@@ -4,6 +4,7 @@ import (
 	"github.com/comunifi/relay/internal/accounts"
 	"github.com/comunifi/relay/internal/bucket"
 	"github.com/comunifi/relay/internal/chain"
+	"github.com/comunifi/relay/internal/events"
 	"github.com/comunifi/relay/internal/legacylogs"
 	"github.com/comunifi/relay/internal/paymaster"
 	"github.com/comunifi/relay/internal/profiles"
@@ -40,6 +41,7 @@ func (s *Server) AddMiddleware(cr *chi.Mux) *chi.Mux {
 func (s *Server) AddRoutes(cr *chi.Mux, b *bucket.Bucket) *chi.Mux {
 	// instantiate handlers
 	v := version.NewService()
+	ev := events.NewHandlers(s.db, s.pools)
 	rpc := rpc.NewHandlers()
 	pm := paymaster.NewService(s.evm, s.db)
 	uop := userop.NewService(s.evm, s.db, s.userOpQueue, s.chainID)
@@ -54,6 +56,7 @@ func (s *Server) AddRoutes(cr *chi.Mux, b *bucket.Bucket) *chi.Mux {
 		cr.Get("/", v.Current)
 	})
 
+	// legacy routes that are maintained for v1 compatibility
 	cr.Route("/v1", func(cr chi.Router) {
 		// accounts
 		cr.Route("/accounts", func(cr chi.Router) {
@@ -107,7 +110,8 @@ func (s *Server) AddRoutes(cr *chi.Mux, b *bucket.Bucket) *chi.Mux {
 			}))
 		})
 
-		cr.Get("/rpc", rpc.HandleConnection) // for sending RPC calls
+		cr.Get("/events/{contract}/{topic}", ev.HandleConnection) // for listening to events
+		cr.Get("/rpc", rpc.HandleConnection)                      // for sending RPC calls
 	})
 
 	return cr

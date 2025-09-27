@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/tokenEntryPoint"
+	nostreth "github.com/comunifi/nostr-eth"
 	"github.com/comunifi/relay/internal/db"
 	"github.com/comunifi/relay/internal/nostr"
 	"github.com/comunifi/relay/internal/ws"
@@ -19,7 +20,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
-	nostreth "github.com/merepools/nostr-eth"
 )
 
 type UserOpService struct {
