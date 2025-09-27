@@ -1,7 +1,10 @@
 package nostr
 
 import (
+	"strconv"
+
 	nostreth "github.com/comunifi/nostr-eth"
+	"github.com/lib/pq"
 	"github.com/nbd-wtf/go-nostr"
 )
 
@@ -26,23 +29,17 @@ func (n *Nostr) GetEvent(id string) (*nostr.Event, error) {
 
 // GetMentionEvent returns the mention event for a given id
 func (n *Nostr) GetMentionEvent(id string) (*nostr.Event, error) {
+	// Collect unique values for tagvalues query
+	tagValues := []string{id, strconv.Itoa(nostreth.KindTxLog)}
+
 	// Query the event table for mention events that reference the given event ID
 	row := n.ndb.QueryRow(`
 		SELECT id, pubkey, created_at, kind, content, sig, tags
 		FROM event
 		WHERE kind = 1
-		AND EXISTS (
-			SELECT 1
-			FROM jsonb_array_elements(tags) AS tag
-			WHERE tag->>0 = 'q' AND tag->>1 = $1
-		)
-		AND EXISTS (
-			SELECT 1
-			FROM jsonb_array_elements(tags) AS tag
-			WHERE tag->>0 = 'k' AND tag->>1 = $2
-		)
+		AND tagvalues @> $1
 		LIMIT 1
-	`, id, nostreth.KindTxLog)
+	`, pq.Array(tagValues))
 
 	var event nostr.Event
 

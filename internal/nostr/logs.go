@@ -3,34 +3,29 @@ package nostr
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
+	"strings"
 	"time"
 
 	nostreth "github.com/comunifi/nostr-eth"
 	"github.com/comunifi/relay/pkg/relay"
+	"github.com/lib/pq"
 )
 
 // GetLog returns the log for a given hash by querying the "d" tag
 func (n *Nostr) GetLog(hash, chainID string) (*relay.LegacyLog, error) {
 	var log relay.LegacyLog
 
-	// Query the event table for events where the "t" tag matches the chain ID and "d" tag matches the hash
+	// Collect unique values for tagvalues query
+	tagValues := []string{chainID, hash}
+
+	// Query the event table for events using tagvalues @> approach
 	row := n.ndb.QueryRow(`
 		SELECT id, pubkey, created_at, kind, content, sig, tags
 		FROM event
 		WHERE kind = $1 
-		AND EXISTS (
-			SELECT 1
-			FROM jsonb_array_elements(tags) AS tag
-			WHERE tag->>0 = 't' AND tag->>1 = $2
-		)
-		AND EXISTS (
-			SELECT 1
-			FROM jsonb_array_elements(tags) AS tag
-			WHERE tag->>0 = 'd' AND tag->>1 = $3
-		)
+		AND tagvalues @> $2
 		LIMIT 1
-	`, nostreth.KindTxLog, chainID, hash)
+	`, nostreth.KindTxLog, pq.Array(tagValues))
 
 	var id, pubkey, content, sig string
 	var createdAt int64
@@ -93,17 +88,16 @@ func (n *Nostr) GetLog(hash, chainID string) (*relay.LegacyLog, error) {
 func (n *Nostr) GetAllPaginatedLogs(contract string, topic string, maxDate time.Time, limit, offset int) ([]*relay.LegacyLog, error) {
 	logs := []*relay.LegacyLog{}
 
+	// Collect unique values for tagvalues query
+	tagValues := []string{contract}
+
 	// Query the event table for tx_log events with pagination and filtering
 	query := `
 		SELECT id, pubkey, created_at, kind, content, sig, tags
 		FROM event
 		WHERE kind = $1 
 		AND created_at <= $2
-		AND EXISTS (
-			SELECT 1
-			FROM jsonb_array_elements(tags) AS tag
-			WHERE tag->>0 = 'p' AND tag->>1 = $3
-		)
+		AND tagvalues @> $3
 		AND EXISTS (
 			SELECT 1
 			FROM jsonb_array_elements(tags) AS tag
@@ -113,7 +107,7 @@ func (n *Nostr) GetAllPaginatedLogs(contract string, topic string, maxDate time.
 		LIMIT $5 OFFSET $6
 	`
 
-	args := []any{nostreth.KindTxLog, maxDate.Unix(), contract, topic, limit, offset}
+	args := []any{nostreth.KindTxLog, maxDate.Unix(), pq.Array(tagValues), topic, limit, offset}
 
 	rows, err := n.ndb.Query(query, args...)
 	if err != nil {
@@ -183,17 +177,16 @@ func (n *Nostr) GetAllPaginatedLogs(contract string, topic string, maxDate time.
 func (n *Nostr) GetAllNewLogs(contract string, topic string, fromDate time.Time, limit, offset int) ([]*relay.LegacyLog, error) {
 	logs := []*relay.LegacyLog{}
 
+	// Collect unique values for tagvalues query
+	tagValues := []string{contract}
+
 	// Query the event table for tx_log events with pagination and filtering
 	query := `
 		SELECT id, pubkey, created_at, kind, content, sig, tags
 		FROM event
 		WHERE kind = $1 
 		AND created_at >= $2
-		AND EXISTS (
-			SELECT 1
-			FROM jsonb_array_elements(tags) AS tag
-			WHERE tag->>0 = 'p' AND tag->>1 = $3
-		)
+		AND tagvalues @> $3
 		AND EXISTS (
 			SELECT 1
 			FROM jsonb_array_elements(tags) AS tag
@@ -203,7 +196,7 @@ func (n *Nostr) GetAllNewLogs(contract string, topic string, fromDate time.Time,
 		LIMIT $5 OFFSET $6
 	`
 
-	args := []any{nostreth.KindTxLog, fromDate.Unix(), contract, topic, limit, offset}
+	args := []any{nostreth.KindTxLog, fromDate.Unix(), pq.Array(tagValues), topic, limit, offset}
 
 	rows, err := n.ndb.Query(query, args...)
 	if err != nil {
@@ -273,80 +266,49 @@ func (n *Nostr) GetAllNewLogs(contract string, topic string, fromDate time.Time,
 func (n *Nostr) GetPaginatedLogs(contract string, topic string, maxDate time.Time, dataFilters, dataFilters2 map[string]any, limit, offset int) ([]*relay.LegacyLog, error) {
 	logs := []*relay.LegacyLog{}
 
+	// Collect unique values from both dataFilters and dataFilters2, plus contract
+	uniqueValues := make(map[string]bool)
+
+	// Add contract to unique values
+	uniqueValues[strings.Trim(contract, " ")] = true
+
+	// Add values from dataFilters
+	for _, value := range dataFilters {
+		if strValue, ok := value.(string); ok {
+			uniqueValues[strings.Trim(strValue, " ")] = true
+		}
+	}
+
+	// Add values from dataFilters2
+	for _, value := range dataFilters2 {
+		if strValue, ok := value.(string); ok {
+			uniqueValues[strings.Trim(strValue, " ")] = true
+		}
+	}
+
+	// Convert map keys to slice for SQL array
+	var tagValues []string
+	for value := range uniqueValues {
+		tagValues = append(tagValues, value)
+	}
+
 	// Base query for tx_log events with pagination and filtering
 	query := `
 		SELECT id, pubkey, created_at, kind, content, sig, tags
 		FROM event
 		WHERE kind = $1 
 		AND created_at <= $2
-		AND EXISTS (
-			SELECT 1
-			FROM jsonb_array_elements(tags) AS tag
-			WHERE tag->>0 = 'p' AND tag->>1 = $3
-		)
+		AND tagvalues @> $3
 		AND EXISTS (
 			SELECT 1
 			FROM jsonb_array_elements(tags) AS tag
 			WHERE tag->>0 = 'topic' AND tag->>1 = $4
 		)
-	`
-
-	args := []any{nostreth.KindTxLog, maxDate.Unix(), contract, topic}
-
-	orderLimit := `
 		ORDER BY created_at DESC
 		LIMIT $5 OFFSET $6
 	`
 
-	if len(dataFilters) > 0 {
-		// Parse the content as JSON to access the data field for filtering
-		topicQuery, topicArgs := relay.GenerateJSONBQuery("content::jsonb->'log_data'->", len(args)+1, dataFilters)
-
-		query += `AND `
-		query += topicQuery
-
-		args = append(args, topicArgs...)
-
-		if len(dataFilters2) > 0 {
-			// Add UNION ALL for second set of filters
-			query += fmt.Sprintf(`
-				UNION ALL
-				SELECT id, pubkey, created_at, kind, content, sig, tags
-				FROM event
-				WHERE kind = $%d 
-				AND created_at <= $%d
-				AND EXISTS (
-					SELECT 1
-					FROM jsonb_array_elements(tags) AS tag
-					WHERE tag->>0 = 'p' AND tag->>1 = $%d
-				)
-				AND EXISTS (
-					SELECT 1
-					FROM jsonb_array_elements(tags) AS tag
-					WHERE tag->>0 = 'topic' AND tag->>1 = $%d
-				)
-				`, len(args)+1, len(args)+2, len(args)+3, len(args)+4)
-
-			args = append(args, nostreth.KindTxLog, maxDate.Unix(), contract, topic)
-
-			topicQuery2, topicArgs2 := relay.GenerateJSONBQuery("content::jsonb->'log_data'->", len(args)+1, dataFilters2)
-
-			query += `AND `
-			query += topicQuery2
-
-			args = append(args, topicArgs2...)
-		}
-
-		argsLength := len(args)
-
-		orderLimit = fmt.Sprintf(`
-			ORDER BY created_at DESC LIMIT $%d OFFSET $%d
-			`, argsLength+1, argsLength+2)
-	}
-
-	args = append(args, limit, offset)
-
-	query += orderLimit
+	args := []any{nostreth.KindTxLog, maxDate.Unix(), pq.Array(tagValues), topic, limit, offset}
 
 	rows, err := n.ndb.Query(query, args...)
 	if err != nil {
@@ -416,17 +378,39 @@ func (n *Nostr) GetPaginatedLogs(contract string, topic string, maxDate time.Tim
 func (n *Nostr) GetNewLogs(contract string, topic string, fromDate time.Time, dataFilters, dataFilters2 map[string]any, limit, offset int) ([]*relay.LegacyLog, error) {
 	logs := []*relay.LegacyLog{}
 
+	// Collect unique values from both dataFilters and dataFilters2, plus contract
+	uniqueValues := make(map[string]bool)
+
+	// Add contract to unique values
+	uniqueValues[strings.Trim(contract, " ")] = true
+
+	// Add values from dataFilters
+	for _, value := range dataFilters {
+		if strValue, ok := value.(string); ok {
+			uniqueValues[strings.Trim(strValue, " ")] = true
+		}
+	}
+
+	// Add values from dataFilters2
+	for _, value := range dataFilters2 {
+		if strValue, ok := value.(string); ok {
+			uniqueValues[strings.Trim(strValue, " ")] = true
+		}
+	}
+
+	// Convert map keys to slice for SQL array
+	var tagValues []string
+	for value := range uniqueValues {
+		tagValues = append(tagValues, value)
+	}
+
 	// Base query for tx_log events with pagination and filtering
 	query := `
 		SELECT id, pubkey, created_at, kind, content, sig, tags
 		FROM event
 		WHERE kind = $1 
 		AND created_at >= $2
-		AND EXISTS (
-			SELECT 1
-			FROM jsonb_array_elements(tags) AS tag
-			WHERE tag->>0 = 'p' AND tag->>1 = $3
-		)
+		AND tagvalues @> $3
 		AND EXISTS (
 			SELECT 1
 			FROM jsonb_array_elements(tags) AS tag
@@ -434,65 +418,15 @@ func (n *Nostr) GetNewLogs(contract string, topic string, fromDate time.Time, da
 		)
 	`
 
-	args := []any{nostreth.KindTxLog, fromDate.Unix(), contract, topic}
+	args := []any{nostreth.KindTxLog, fromDate.Unix(), pq.Array(tagValues), topic}
 
-	orderLimit := `
-		ORDER BY created_at DESC
-		LIMIT $5 OFFSET $6
-	`
-
-	if len(dataFilters) > 0 {
-		// Parse the content as JSON to access the data field for filtering
-		topicQuery, topicArgs := relay.GenerateJSONBQuery("content::jsonb->'log_data'->", len(args)+1, dataFilters)
-
-		query += `AND `
-		query += topicQuery
-
-		args = append(args, topicArgs...)
-
-		if len(dataFilters2) > 0 {
-			// Add UNION ALL for second set of filters
-			query += fmt.Sprintf(`
-				UNION ALL
-				SELECT id, pubkey, created_at, kind, content, sig, tags
-				FROM event
-				WHERE kind = $%d 
-				AND created_at >= $%d
-				AND EXISTS (
-					SELECT 1
-					FROM jsonb_array_elements(tags) AS tag
-					WHERE tag->>0 = 'p' AND tag->>1 = $%d
-				)
-				AND EXISTS (
-					SELECT 1
-					FROM jsonb_array_elements(tags) AS tag
-					WHERE tag->>0 = 'topic' AND tag->>1 = $%d
-				)
-				`, len(args)+1, len(args)+2, len(args)+3, len(args)+4)
-
-			args = append(args, nostreth.KindTxLog, fromDate.Unix(), contract, topic)
-
-			topicQuery2, topicArgs2 := relay.GenerateJSONBQuery("content::jsonb->'log_data'->", len(args)+1, dataFilters2)
-
-			query += `AND `
-			query += topicQuery2
-
-			args = append(args, topicArgs2...)
-		}
-
-		argsLength := len(args)
-
-		orderLimit = fmt.Sprintf(`
-			ORDER BY created_at DESC LIMIT $%d OFFSET $%d
-			`, argsLength+1, argsLength+2)
-	}
-
+	// Add pagination
+	query += ` ORDER BY created_at DESC LIMIT $5 OFFSET $6`
 	args = append(args, limit, offset)
-
-	query += orderLimit
 
 	rows, err := n.ndb.Query(query, args...)
 	if err != nil {
+		println("error getting new logs", err.Error())
 		return logs, err
 	}
 	defer rows.Close()
