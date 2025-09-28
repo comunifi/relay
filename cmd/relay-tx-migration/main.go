@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 
 	"github.com/comunifi/relay/cmd/relay-tx-migration/logs"
 	"github.com/comunifi/relay/cmd/relay-tx-migration/logs/logdb"
@@ -110,9 +109,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Println("running on :3334")
-	http.ListenAndServe(":3334", relay)
-
 	////////////////////
-	log.Default().Println("engine stopped")
+	log.Default().Println("data migration complete")
 }

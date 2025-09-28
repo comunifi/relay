@@ -63,6 +63,8 @@ github.com/coder/websocket v1.8.13 h1:f3QZdXy7uGVz+4uCJy2nTZyM0yTBj8yANEHhqlXZ9F
 github.com/coder/websocket v1.8.13/go.mod h1:LNVeNrXQZfe5qhS9ALED3uA+l5pPqvwXg3CKoDBB2gs=
 github.com/comunifi/nostr-eth v0.0.21 h1:ScLySHraCE1So+5S4MSKj7wuwAPceGOkxpk8WeL0EQ0=
 github.com/comunifi/nostr-eth v0.0.21/go.mod h1:0znLOgSO4pDJxPf5Zfxs5Ivi4jvzyRXwfXMBDT5rUPc=
+github.com/comunifi/nostr-eth v0.0.24 h1:X/B69v/NIr1Wsx2Zr6GMoFG53f+cYWx94rZxzKaYpSU=
+github.com/comunifi/nostr-eth v0.0.24/go.mod h1:0znLOgSO4pDJxPf5Zfxs5Ivi4jvzyRXwfXMBDT5rUPc=
 github.com/consensys/gnark-crypto v0.18.0 h1:vIye/FqI50VeAr0B3dx+YjeIvmc3LWz4yEfbWBpTUf0=
 github.com/consensys/gnark-crypto v0.18.0/go.mod h1:L3mXGFTe1ZN+RSJ+CLjUt9x7PNdx8ubaYfDROyp2Z8c=
 github.com/cpuguy83/go-md2man/v2 v2.0.5 h1:ZtcqGrnekaHpVLArFSe4HK5DoKx1T0rq2DwVB0alcyc=

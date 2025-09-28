@@ -35,6 +35,7 @@ func (db *EventDB) CreateEventsTable(suffix string) error {
 		contract text NOT NULL,
 		event_signature text NOT NULL,
 		name text NOT NULL,
+		topic text NOT NULL,
 		created_at timestamp NOT NULL DEFAULT current_timestamp,
 		updated_at timestamp NOT NULL DEFAULT current_timestamp,
 		UNIQUE (contract, event_signature)
@@ -93,7 +94,7 @@ func (db *EventDB) GetEvent(contract string, signature string) (*relay.Event, er
 // GetEvents gets all events from the db
 func (db *EventDB) GetEvents() ([]*relay.Event, error) {
 	rows, err := db.rdb.Query(db.ctx, fmt.Sprintf(`
-    SELECT contract, event_signature, name, created_at, updated_at
+    SELECT contract, event_signature, name, topic, created_at, updated_at
     FROM t_events_%s
     ORDER BY created_at ASC
     `, db.suffix))
@@ -105,7 +106,7 @@ func (db *EventDB) GetEvents() ([]*relay.Event, error) {
 	events := []*relay.Event{}
 	for rows.Next() {
 		var event relay.Event
-		err = rows.Scan(&event.Contract, &event.EventSignature, &event.Name, &event.CreatedAt, &event.UpdatedAt)
+		err = rows.Scan(&event.Contract, &event.EventSignature, &event.Name, &event.Topic, &event.CreatedAt, &event.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}

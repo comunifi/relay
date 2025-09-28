@@ -100,11 +100,11 @@ func MigrateLogs(ctx context.Context, evm *ethrequest.EthService, chainID *big.I
 
 	for _, event := range events {
 		log.Printf("Migrating logs for event: %s", event.Name)
-		topic := event.GetTopic0FromEventSignature()
+		topic := event.Topic
 
 		offset := 0
 		for {
-			logs, err := db.LogDB.GetAllPaginatedLogs(event.Contract, topic.Hex(), maxDate, 100, offset)
+			logs, err := db.LogDB.GetAllPaginatedLogs(event.Contract, topic, maxDate, 100, offset)
 			if err != nil {
 				return err
 			}
@@ -119,6 +119,7 @@ func MigrateLogs(ctx context.Context, evm *ethrequest.EthService, chainID *big.I
 					Hash:      log.Hash,
 					TxHash:    log.TxHash,
 					ChainID:   chainID.String(),
+					Topic:     topic,
 					CreatedAt: log.CreatedAt,
 					UpdatedAt: log.UpdatedAt,
 					Nonce:     log.Nonce,

@@ -84,6 +84,7 @@ func (i *Indexer) ListenToLogs(ev *relay.Event, quitAck chan error) error {
 		l := &nostreth.Log{
 			TxHash:    log.TxHash.Hex(),
 			ChainID:   i.chainID.String(),
+			Topic:     ev.Topic,
 			CreatedAt: time.Unix(int64(blk.Time), 0).UTC(),
 			UpdatedAt: time.Now().UTC(),
 			Nonce:     int64(0),
