@@ -3,27 +3,22 @@ package db
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
-	"github.com/comunifi/relay/pkg/common"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type DataDB struct {
-	ctx    context.Context
-	suffix string
-	db     *pgxpool.Pool
-	rdb    *pgxpool.Pool
+	ctx context.Context
+	db  *pgxpool.Pool
+	rdb *pgxpool.Pool
 }
 
 // NewDataDB creates a new DB
-func NewDataDB(ctx context.Context, db, rdb *pgxpool.Pool, name string) (*DataDB, error) {
+func NewDataDB(ctx context.Context, db, rdb *pgxpool.Pool) (*DataDB, error) {
 	datadb := &DataDB{
-		ctx:    ctx,
-		suffix: name,
-		db:     db,
-		rdb:    rdb,
+		ctx: ctx,
+		db:  db,
+		rdb: rdb,
 	}
 
 	return datadb, nil
@@ -31,39 +26,36 @@ func NewDataDB(ctx context.Context, db, rdb *pgxpool.Pool, name string) (*DataDB
 
 // CreateDataTable creates a table to store extra data
 func (db *DataDB) CreateDataTable() error {
-	_, err := db.db.Exec(db.ctx, fmt.Sprintf(`
-	CREATE TABLE IF NOT EXISTS t_logs_data_%s(
+	_, err := db.db.Exec(db.ctx, `
+	CREATE TABLE IF NOT EXISTS t_logs_data(
 		hash TEXT NOT NULL PRIMARY KEY,
 		data jsonb DEFAULT NULL,
 		created_at timestamp NOT NULL DEFAULT current_timestamp,
 		updated_at timestamp NOT NULL DEFAULT current_timestamp
-	);
-	`, db.suffix))
+	);`)
 
 	return err
 }
 
 // CreateDataTableIndexes creates the indexes for the data table
 func (db *DataDB) CreateDataTableIndexes() error {
-	suffix := common.ShortenName(db.suffix, 6)
-
-	_, err := db.db.Exec(db.ctx, fmt.Sprintf(`
-	CREATE INDEX IF NOT EXISTS idx_logs_data_%s_hash ON t_logs_data_%s (hash);
-	`, suffix, db.suffix))
+	_, err := db.db.Exec(db.ctx, `
+	CREATE INDEX IF NOT EXISTS idx_logs_data_hash ON t_logs_data (hash);
+	`)
 
 	return err
 }
 
 // UpsertData adds or updates data for a given hash
-func (db *DataDB) UpsertData(tx pgx.Tx, hash string, data *json.RawMessage) error {
-	_, err := tx.Exec(db.ctx, fmt.Sprintf(`
-	INSERT INTO t_logs_data_%s (hash, data, updated_at)
-	VALUES ($1, $2, CURRENT_TIMESTAMP)
-	ON CONFLICT (hash) 
-	DO UPDATE SET 
-		data = EXCLUDED.data,
-		updated_at = CURRENT_TIMESTAMP
-	`, db.suffix), hash, data)
+func (db *DataDB) UpsertData(hash string, data *json.RawMessage) error {
+	_, err := db.db.Exec(db.ctx, `
+	INSERT INTO t_logs_data (hash, data, updated_at)
+		VALUES ($1, $2, CURRENT_TIMESTAMP)
+		ON CONFLICT (hash) 
+		DO UPDATE SET 
+			data = EXCLUDED.data,
+			updated_at = CURRENT_TIMESTAMP
+	`, hash, data)
 
 	return err
 }
@@ -72,11 +64,20 @@ func (db *DataDB) UpsertData(tx pgx.Tx, hash string, data *json.RawMessage) erro
 func (db *DataDB) GetData(hash string) (*json.RawMessage, error) {
 	var data *json.RawMessage
 
-	err := db.rdb.QueryRow(db.ctx, fmt.Sprintf(`
+	err := db.rdb.QueryRow(db.ctx, `
 	SELECT data 
-	FROM t_logs_data_%s 
+	FROM t_logs_data 
 	WHERE hash = $1
-	`, db.suffix), hash).Scan(&data)
+	`, hash).Scan(&data)
 
 	return data, err
+}
+
+// DeleteData deletes data for a given hash
+func (db *DataDB) DeleteData(hash string) error {
+	_, err := db.db.Exec(db.ctx, `
+	DELETE FROM t_logs_data WHERE hash = $1
+	`, hash)
+
+	return err
 }

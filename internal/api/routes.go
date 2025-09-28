@@ -41,7 +41,7 @@ func (s *Server) AddMiddleware(cr *chi.Mux) *chi.Mux {
 func (s *Server) AddRoutes(cr *chi.Mux, b *bucket.Bucket) *chi.Mux {
 	// instantiate handlers
 	v := version.NewService()
-	ev := events.NewHandlers(s.db, s.pools)
+	ev := events.NewHandlers(s.chainID.String(), s.db, s.pools)
 	rpc := rpc.NewHandlers()
 	pm := paymaster.NewService(s.evm, s.db)
 	uop := userop.NewService(s.evm, s.db, s.userOpQueue, s.chainID)

@@ -1,13 +1,13 @@
 package nostr
 
 import (
-	"database/sql"
 	"encoding/json"
 	"strings"
 	"time"
 
 	nostreth "github.com/comunifi/nostr-eth"
 	"github.com/comunifi/relay/pkg/relay"
+	"github.com/jackc/pgx/v5"
 	"github.com/lib/pq"
 )
 
@@ -61,7 +61,7 @@ func (n *Nostr) GetLog(hash, chainID string) (*relay.LegacyLog, error) {
 	// v1 requires the message as extra data, attempt to find a message
 	mentionEvent, err := n.GetMentionEvent(id)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if err == pgx.ErrNoRows {
 			return &log, nil
 		}
 

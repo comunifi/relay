@@ -25,6 +25,7 @@ type DB struct {
 	EventDB     *EventDB
 	SponsorDB   *SponsorDB
 	PushTokenDB map[string]*PushTokenDB
+	DataDB      *DataDB
 }
 
 // NewDB instantiates a new DB
@@ -44,7 +45,7 @@ func NewDB(chainID *big.Int, secret, username, password, dbname, port, host, rho
 
 	evname := chainID.String()
 
-	eventDB, err := NewEventDB(ctx, db, db, evname)
+	eventDB, err := NewEventDB(ctx, db, db)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +55,7 @@ func NewDB(chainID *big.Int, secret, username, password, dbname, port, host, rho
 		return nil, err
 	}
 
-	datadb, err := NewDataDB(ctx, db, db, evname)
+	datadb, err := NewDataDB(ctx, db, db)
 	if err != nil {
 		return nil, err
 	}
@@ -66,23 +67,24 @@ func NewDB(chainID *big.Int, secret, username, password, dbname, port, host, rho
 		rdb:       db,
 		EventDB:   eventDB,
 		SponsorDB: sponsorDB,
+		DataDB:    datadb,
 	}
 
 	// check if db exists before opening, since we use rwc mode
-	exists, err := d.EventTableExists(evname)
+	exists, err := d.EventTableExists()
 	if err != nil {
 		return nil, err
 	}
 
 	if !exists {
 		// create table
-		err = eventDB.CreateEventsTable(evname)
+		err = eventDB.CreateEventsTable()
 		if err != nil {
 			return nil, err
 		}
 
 		// create indexes
-		err = eventDB.CreateEventsTableIndexes(evname)
+		err = eventDB.CreateEventsTableIndexes()
 		if err != nil {
 			return nil, err
 		}
@@ -108,10 +110,10 @@ func NewDB(chainID *big.Int, secret, username, password, dbname, port, host, rho
 		}
 	}
 
-	log.Default().Println("creating data db for: ", evname)
+	log.Default().Println("creating data db")
 
 	// check if db exists before opening, since we use rwc mode
-	exists, err = d.DataTableExists(evname)
+	exists, err = d.DataTableExists()
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +134,7 @@ func NewDB(chainID *big.Int, secret, username, password, dbname, port, host, rho
 
 	ptdb := map[string]*PushTokenDB{}
 
-	evs, err := eventDB.GetEvents()
+	evs, err := eventDB.GetEvents(chainID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -177,8 +179,8 @@ func NewDB(chainID *big.Int, secret, username, password, dbname, port, host, rho
 }
 
 // EventTableExists checks if a table exists in the database
-func (db *DB) EventTableExists(suffix string) (bool, error) {
-	tableName := fmt.Sprintf("t_events_%s", suffix)
+func (db *DB) EventTableExists() (bool, error) {
+	tableName := "t_events"
 	var exists bool
 	err := db.rdb.QueryRow(db.ctx, "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = $1)", tableName).Scan(&exists)
 	if err != nil {
@@ -225,8 +227,8 @@ func (db *DB) PushTokenTableExists(suffix string) (bool, error) {
 }
 
 // DataTableExists checks if a table exists in the database
-func (db *DB) DataTableExists(suffix string) (bool, error) {
-	tableName := fmt.Sprintf("t_logs_data_%s", suffix)
+func (db *DB) DataTableExists() (bool, error) {
+	tableName := "t_logs_data"
 	var exists bool
 	err := db.rdb.QueryRow(db.ctx, "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = $1)", tableName).Scan(&exists)
 	if err != nil {

@@ -159,7 +159,7 @@ func main() {
 	if !*noindex {
 		log.Default().Println("starting indexer service...")
 
-		idx := indexer.NewIndexer(ctx, conf.RelayPrivateKey, chid, d, &ndb, evm, pools)
+		idx := indexer.NewIndexer(ctx, conf.RelayPrivateKey, chid, d, n, evm, pools)
 		go func() {
 			quitAck <- idx.Start()
 		}()
@@ -170,7 +170,7 @@ func main() {
 	// userop queue
 	log.Default().Println("starting userop queue service...")
 
-	op := queue.NewUserOpService(ctx, d, n, evm, pushqueue, pools)
+	op := queue.NewUserOpService(ctx, chid, d, n, evm, pushqueue, pools)
 
 	useropq, qerr := queue.NewService("userop", 3, *useropqbf, ctx)
 	defer useropq.Close()

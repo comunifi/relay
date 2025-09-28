@@ -2,12 +2,12 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"time"
 
 	"github.com/comunifi/relay/pkg/common"
 	"github.com/comunifi/relay/pkg/relay"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -94,7 +94,7 @@ func (db *PushTokenDB) GetAccountTokens(account string) ([]*relay.PushToken, err
 		WHERE account = $1
 		`, db.suffix), account)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if err == pgx.ErrNoRows {
 			return pt, nil
 		}
 

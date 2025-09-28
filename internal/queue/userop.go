@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +27,7 @@ type UserOpService struct {
 	ctx        context.Context
 	inProgress map[common.Address][]string
 	mu         sync.Mutex
+	chainID    *big.Int
 	db         *db.DB
 	n          *nostr.Nostr
 	evm        relay.EVMRequester
@@ -33,13 +35,14 @@ type UserOpService struct {
 	pools      *ws.ConnectionPools
 }
 
-func NewUserOpService(ctx context.Context, db *db.DB, n *nostr.Nostr,
+func NewUserOpService(ctx context.Context, chainID *big.Int, db *db.DB, n *nostr.Nostr,
 	evm relay.EVMRequester,
 	pushq *Service,
 	pools *ws.ConnectionPools) *UserOpService {
 	return &UserOpService{
 		ctx:        ctx,
 		inProgress: map[common.Address][]string{},
+		chainID:    chainID,
 		db:         db,
 		n:          n,
 		evm:        evm,
@@ -191,7 +194,7 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 
 		edb := s.db.EventDB
 
-		events, err := edb.GetEvents()
+		events, err := edb.GetEvents(s.chainID.String())
 		if err != nil {
 			invalid = append(invalid, msgs...)
 			for range msgs {
@@ -234,13 +237,6 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 				continue
 			}
 
-			// TODO: add extra data
-			// txdata, ok := txm.ExtraData.(*json.RawMessage)
-			// if !ok {
-			// 	// if it's invalid, set it to nil to avoid errors and corrupted json
-			// 	txdata = nil
-			// }
-
 			// get destination address from calldata
 			dest, err := comm.ParseDestinationFromCallData(userop.CallData)
 			if err != nil {
@@ -249,6 +245,7 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 
 			log := &nostreth.Log{
 				TxHash:    signedTxHash,
+				ChainID:   s.chainID.String(),
 				CreatedAt: time.Now().UTC(),
 				UpdatedAt: time.Now().UTC(),
 				Nonce:     userop.Nonce.Int64(),
@@ -260,20 +257,21 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 
 			log.Hash = log.GenerateUniqueHash()
 
-			// TODO: not relevant anymore
-			// ev, err := nostreth.CreateTxLogEvent(*log)
-			// if err != nil {
-			// 	println("error creating tx log event", err.Error())
-			// 	continue
-			// }
+			// handle descriptions passed as extra data in v1
+			txdata, ok := txm.ExtraData.(*json.RawMessage)
+			if !ok {
+				// if it's invalid, set it to nil to avoid errors and corrupted json
+				txdata = nil
+			}
 
-			// err = s.n.SignAndSaveEvent(s.ctx, ev)
-			// if err != nil {
-			// 	println("error adding log", err.Error())
-			// }
+			if txdata != nil {
+				err = s.db.DataDB.UpsertData(log.Hash, txdata)
+				if err != nil {
+					// TODO: log this error somewhere
+				}
+			}
 
-			// broadcast updates to connected clients
-			// s.pools.BroadcastMessage(relay.WSMessageTypeNew, log)
+			// TODO: save an updated user op event
 
 			insertedLogs[txm.Paymaster] = append(insertedLogs[txm.Paymaster], log)
 		}
@@ -285,14 +283,7 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 			e, ok := err.(rpc.Error)
 			if ok && e.ErrorCode() == -32010 {
 				// If the error code is -32010, it means that a tx needs to be replaced
-				// for _, logs := range insertedLogs {
-				// 	for _, log := range logs {
-				// 		// ldb.RemoveLog(log.Hash)
-
-				// 		// broadcast updates to connected clients
-				// 		// s.pools.BroadcastMessage(relay.WSMessageTypeRemove, log)
-				// 	}
-				// }
+				// TODO: update user op event so it is re-submitted
 
 				for _, msg := range msgs {
 					txm, ok := msg.Message.(relay.UserOpMessage)
@@ -317,14 +308,7 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 			}
 			if ok && e.ErrorCode() != -32000 {
 				// If it's an RPC error and the error code is not -32000, remove the sending transfer and return the error
-				// for _, logs := range insertedLogs {
-				// 	for _, log := range logs {
-				// 		ldb.RemoveLog(log.Hash)
-
-				// 		// broadcast updates to connected clients
-				// 		// s.pools.BroadcastMessage(relay.WSMessageTypeRemove, log)
-				// 	}
-				// }
+				// TODO: update user op event so it is deleted
 
 				invalid = append(invalid, msgs...)
 				for range msgs {
@@ -342,14 +326,8 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 
 			if !strings.Contains(e.Error(), "insufficient funds") {
 				// If the error is not about insufficient funds, remove the sending transfer and return the error
-				// for _, logs := range insertedLogs {
-				// 	for _, log := range logs {
-				// 		ldb.RemoveLog(log.Hash)
-
-				// 		// broadcast updates to connected clients
-				// 		// s.pools.BroadcastMessage(relay.WSMessageTypeRemove, log)
-				// 	}
-				// }
+				// TODO: update user op event so it is deleted
+				// TODO: log an error, this should be resolved by an admin
 
 				invalid = append(invalid, msgs...)
 				for range msgs {
@@ -364,16 +342,6 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 				s.mu.Unlock()
 				continue
 			}
-
-			// for _, logs := range insertedLogs {
-			// 	for _, log := range logs {
-			// 		ldb.SetStatus(log.Hash, string(relay.LogStatusFail))
-
-			// 		// broadcast updates to connected clients
-			// 		log.Status = relay.LogStatusFail
-			// 		s.pools.BroadcastMessage(relay.WSMessageTypeUpdate, log)
-			// 	}
-			// }
 
 			// Return the error about insufficient funds
 			invalid = append(invalid, msgs...)
@@ -390,37 +358,18 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 			continue
 		}
 
-		// Respond to the messages with the tx hash
+		// v1 compatibility, responds to the messages with the tx hash
 		for _, msg := range msgs {
 			msg.Respond(signedTxHash, nil)
 		}
 
-		// for _, logs := range insertedLogs {
-		// 	for _, log := range logs {
-		// 		ldb.RemoveLog(log.Hash)
-		// 		// err := ldb.SetStatus(log.Hash, string(relay.LogStatusPending))
-		// 		if err != nil {
-		// 			ldb.RemoveLog(log.Hash)
-
-		// 			// broadcast updates to connected clients
-		// 			// s.pools.BroadcastMessage(relay.WSMessageTypeRemove, log)
-		// 		}
-		// 	}
-		// }
-
 		go func() {
 			// async wait for the transaction to be mined
 			err = s.evm.WaitForTx(signedTx, 16)
-			// if err != nil {
-			// 	for _, logs := range insertedLogs {
-			// 		for _, log := range logs {
-			// 			ldb.RemoveLog(log.Hash)
-
-			// 			// broadcast updates to connected clients
-			// 			// s.pools.BroadcastMessage(relay.WSMessageTypeRemove, log)
-			// 		}
-			// 	}
-			// }
+			if err != nil {
+				// TODO: update user op event so it is deleted
+				// TODO: log this error somewhere, submitted but then was not mined within a reasonable amount of time
+			}
 
 			// remove from inProgress
 			s.mu.Lock()

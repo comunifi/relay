@@ -60,7 +60,7 @@ type ExtraData struct {
 }
 
 // generate hash for transfer using a provided index, from, to and the tx hash
-func (t *LegacyLog) GenerateUniqueHash() string {
+func (t *LegacyLog) GenerateUniqueHash(chainID string) string {
 	buf := new(bytes.Buffer)
 
 	// Write each value to the buffer as bytes
@@ -72,6 +72,7 @@ func (t *LegacyLog) GenerateUniqueHash() string {
 	}
 
 	buf.Write(common.FromHex(t.TxHash))
+	buf.Write(common.FromHex(chainID))
 
 	hash := crypto.Keccak256Hash(buf.Bytes())
 	return hash.Hex()

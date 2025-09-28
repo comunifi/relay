@@ -12,14 +12,16 @@ import (
 )
 
 type Handlers struct {
-	db    *db.DB
-	pools *ws.ConnectionPools
+	chainID string
+	db      *db.DB
+	pools   *ws.ConnectionPools
 }
 
-func NewHandlers(db *db.DB, pools *ws.ConnectionPools) *Handlers {
+func NewHandlers(chainID string, db *db.DB, pools *ws.ConnectionPools) *Handlers {
 	return &Handlers{
-		db:    db,
-		pools: pools,
+		chainID: chainID,
+		db:      db,
+		pools:   pools,
 	}
 }
 
@@ -31,7 +33,7 @@ func (h *Handlers) HandleConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	exists, err := h.db.EventDB.EventExists(common.ChecksumAddress(contract))
+	exists, err := h.db.EventDB.EventExists(h.chainID, common.ChecksumAddress(contract))
 	if err != nil || !exists {
 		http.Error(w, "event does not exist", http.StatusNotFound)
 		return

@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/jackc/pgx/v5"
 
 	comm "github.com/comunifi/relay/pkg/common"
 	"github.com/comunifi/relay/pkg/relay"
@@ -93,20 +94,46 @@ func (i *Indexer) ListenToLogs(ev *relay.Event, quitAck chan error) error {
 
 		l.Hash = l.GenerateUniqueHash()
 
-		ev, err := nostreth.CreateTxLogEvent(*l)
+		txEv, err := nostreth.CreateTxLogEvent(*l)
 		if err != nil {
 			fmt.Println("Error creating tx log event:", err)
 			return nil
 		}
 
-		err = ev.Sign(i.secretKey)
+		txEv, err = i.n.SignAndSaveEvent(i.ctx, txEv)
 		if err != nil {
 			return err
 		}
 
-		err = i.ndb.SaveEvent(i.ctx, ev)
-		if err != nil {
+		txData, err := i.db.DataDB.GetData(l.Hash)
+		if err != nil && err != pgx.ErrNoRows {
 			return err
+		}
+
+		if txData != nil {
+			// unmarshal the extra data
+			var extraData relay.ExtraData
+			err = json.Unmarshal(*txData, &extraData)
+			if err != nil {
+				return err
+			}
+
+			rev, err := nostreth.CreateQuoteRepostEvent(extraData.Description, &ev.Alias, txEv, i.n.RelayUrl)
+			if err != nil {
+				return err
+			}
+
+			if extraData.Description != "" {
+				rev, err = i.n.SignAndSaveEvent(i.ctx, rev)
+				if err != nil {
+					return err
+				}
+			}
+
+			err = i.db.DataDB.DeleteData(l.Hash)
+			if err != nil && err != pgx.ErrNoRows {
+				return err
+			}
 		}
 
 		llog := &relay.LegacyLog{
@@ -120,7 +147,10 @@ func (i *Indexer) ListenToLogs(ev *relay.Event, quitAck chan error) error {
 			Value:     l.Value,
 			Data:      l.Data,
 			Status:    relay.LegacyLogStatusSuccess,
+			ExtraData: txData,
 		}
+
+		llog.GenerateUniqueHash(i.chainID.String())
 
 		i.pools.BroadcastMessage(relay.WSMessageTypeUpdate, llog)
 	}

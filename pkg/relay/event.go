@@ -11,7 +11,10 @@ import (
 )
 
 type Event struct {
+	ChainID        string    `json:"chain_id"`
 	Contract       string    `json:"contract"`
+	Topic          string    `json:"topic"`
+	Alias          string    `json:"alias"`
 	EventSignature string    `json:"event_signature"`
 	Name           string    `json:"name"`
 	CreatedAt      time.Time `json:"created_at"`

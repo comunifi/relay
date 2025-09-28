@@ -6,9 +6,9 @@ import (
 	"math/big"
 
 	"github.com/comunifi/relay/internal/db"
+	"github.com/comunifi/relay/internal/nostr"
 	"github.com/comunifi/relay/internal/ws"
 	"github.com/comunifi/relay/pkg/relay"
-	"github.com/fiatjaf/eventstore/postgresql"
 )
 
 type ErrIndexing error
@@ -23,18 +23,18 @@ type Indexer struct {
 	chainID   *big.Int
 
 	db  *db.DB
-	ndb *postgresql.PostgresBackend
+	n   *nostr.Nostr
 	evm relay.EVMRequester
 
 	pools *ws.ConnectionPools
 }
 
-func NewIndexer(ctx context.Context, secretKey string, chainID *big.Int, db *db.DB, ndb *postgresql.PostgresBackend, evm relay.EVMRequester, pools *ws.ConnectionPools) *Indexer {
-	return &Indexer{ctx: ctx, secretKey: secretKey, chainID: chainID, db: db, ndb: ndb, evm: evm, pools: pools}
+func NewIndexer(ctx context.Context, secretKey string, chainID *big.Int, db *db.DB, n *nostr.Nostr, evm relay.EVMRequester, pools *ws.ConnectionPools) *Indexer {
+	return &Indexer{ctx: ctx, secretKey: secretKey, chainID: chainID, db: db, n: n, evm: evm, pools: pools}
 }
 
 func (i *Indexer) Start() error {
-	evs, err := i.db.EventDB.GetEvents()
+	evs, err := i.db.EventDB.GetEvents(i.chainID.String())
 	if err != nil {
 		return err
 	}
