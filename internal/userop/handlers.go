@@ -5,12 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/big"
 	"net/http"
 	"time"
 
 	pay "github.com/citizenwallet/smartcontracts/pkg/contracts/paymaster"
+	nostreth "github.com/comunifi/nostr-eth"
 	"github.com/comunifi/relay/internal/db"
+	nost "github.com/comunifi/relay/internal/nostr"
 	"github.com/comunifi/relay/internal/queue"
 	comm "github.com/comunifi/relay/pkg/common"
 	"github.com/comunifi/relay/pkg/relay"
@@ -19,20 +22,23 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/go-chi/chi/v5"
+	"github.com/nbd-wtf/go-nostr"
 )
 
 type Service struct {
 	evm     relay.EVMRequester
 	db      *db.DB
+	n       *nost.Nostr
 	useropq *queue.Service
 	chainId *big.Int
 }
 
 // NewService
-func NewService(evm relay.EVMRequester, db *db.DB, useropq *queue.Service, chid *big.Int) *Service {
+func NewService(evm relay.EVMRequester, db *db.DB, n *nost.Nostr, useropq *queue.Service, chid *big.Int) *Service {
 	return &Service{
 		evm,
 		db,
+		n,
 		useropq,
 		chid,
 	}
@@ -69,7 +75,7 @@ func (s *Service) Send(r *http.Request) (any, error) {
 		return nil, err
 	}
 
-	var userop relay.UserOp
+	var userop nostreth.UserOp
 	var epAddr string
 	var data *json.RawMessage
 	var xdata *json.RawMessage
@@ -210,23 +216,65 @@ func (s *Service) Send(r *http.Request) (any, error) {
 	}
 
 	entryPoint := common.HexToAddress(epAddr)
+	if xdata != nil {
+		println("upserting log data")
+		// v1 compatibility, in order for indexing to match this message, we need to store the log data under the user op hash
+		// get destination address from calldata
+		userOpHash := userop.GetHash(s.chainId)
+		println("user op hash:", userOpHash)
 
-	// Create a new message
-	message := relay.NewTxMessage(addr, entryPoint, s.chainId, userop, data, xdata)
+		err = s.db.DataDB.UpsertData(fmt.Sprintf("userop:%s", userOpHash), xdata)
+		if err != nil {
+			return nil, err
+		}
+	}
 
-	// Enqueue the message
-	s.useropq.Enqueue(*message)
-
-	resp, err := message.WaitForResponse()
+	// convert to nostr event
+	println("creating user op event")
+	ev, err := nostreth.CreateUserOpEvent(s.chainId, &addr, &entryPoint, data, userop, nostreth.EventTypeUserOpSubmitted)
 	if err != nil {
 		return nil, err
 	}
 
-	txHash, ok := resp.(string)
-	if !ok {
-		return nil, errors.New("error unmarshalling tx hash")
+	// this is a bit special, it is for v1 support
+	// we will save an event in nostr
+	// it will be processed (hopefully within 12 seconds)
+	// it will come back as an updated user op event
+	// and we will return the tx hash to the requester
+	println("signing and saving user op event")
+	ev, err = s.n.SignAndSaveEvent(context.Background(), ev)
+	if err != nil {
+		return nil, err
 	}
 
+	return "x", nil
+
+	// Create a new message
+	// message := relay.NewTxMessage(addr, entryPoint, s.chainId, userop, data, xdata)
+
+	// Enqueue the message
+	// s.useropq.Enqueue(*message)
+
+	// resp, err := message.WaitForResponse()
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// txHash, ok := resp.(string)
+	// if !ok {
+	// 	return nil, errors.New("error unmarshalling tx hash")
+	// }
+
 	// Return the message ID
-	return txHash, nil
+	// return txHash, nil
+}
+
+func (s *Service) Process(ctx context.Context, evt *nostr.Event) error {
+	if evt.Kind != nostreth.EventUserOpKind {
+		return nil
+	}
+
+	println("processing user op event")
+
+	return nil
 }

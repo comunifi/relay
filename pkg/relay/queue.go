@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"time"
 
+	nostreth "github.com/comunifi/nostr-eth"
 	"github.com/ethereum/go-ethereum/common"
 )
 
@@ -72,9 +73,8 @@ type UserOpMessage struct {
 	Paymaster  common.Address
 	EntryPoint common.Address
 	ChainId    *big.Int
-	UserOp     UserOp
+	UserOp     nostreth.UserOp
 	Data       any
-	ExtraData  any
 	BumpGas    int
 }
 
@@ -88,14 +88,13 @@ func NewMessage(id string, message any, retryCount int, response *chan MessageRe
 	}
 }
 
-func NewTxMessage(pm, entrypoint common.Address, chainId *big.Int, userop UserOp, data, xdata *json.RawMessage) *Message {
+func NewTxMessage(pm, entrypoint common.Address, chainId *big.Int, userop nostreth.UserOp, data *json.RawMessage) *Message {
 	op := UserOpMessage{
 		Paymaster:  pm,
 		EntryPoint: entrypoint,
 		ChainId:    chainId,
 		UserOp:     userop,
 		Data:       data,
-		ExtraData:  xdata,
 	}
 
 	respch := make(chan MessageResponse)

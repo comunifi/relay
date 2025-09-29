@@ -13,14 +13,14 @@ import (
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/tokenEntryPoint"
 	nostreth "github.com/comunifi/nostr-eth"
 	"github.com/comunifi/relay/internal/db"
-	"github.com/comunifi/relay/internal/nostr"
-	"github.com/comunifi/relay/internal/ws"
+	nost "github.com/comunifi/relay/internal/nostr"
 	comm "github.com/comunifi/relay/pkg/common"
 	"github.com/comunifi/relay/pkg/relay"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/jackc/pgx/v5"
 )
 
 type UserOpService struct {
@@ -29,16 +29,12 @@ type UserOpService struct {
 	mu         sync.Mutex
 	chainID    *big.Int
 	db         *db.DB
-	n          *nostr.Nostr
+	n          *nost.Nostr
 	evm        relay.EVMRequester
-	pushq      *Service
-	pools      *ws.ConnectionPools
 }
 
-func NewUserOpService(ctx context.Context, chainID *big.Int, db *db.DB, n *nostr.Nostr,
-	evm relay.EVMRequester,
-	pushq *Service,
-	pools *ws.ConnectionPools) *UserOpService {
+func NewUserOpService(ctx context.Context, chainID *big.Int, db *db.DB, n *nost.Nostr,
+	evm relay.EVMRequester) *UserOpService {
 	return &UserOpService{
 		ctx:        ctx,
 		inProgress: map[common.Address][]string{},
@@ -46,8 +42,6 @@ func NewUserOpService(ctx context.Context, chainID *big.Int, db *db.DB, n *nostr
 		db:         db,
 		n:          n,
 		evm:        evm,
-		pushq:      pushq,
-		pools:      pools,
 	}
 }
 
@@ -258,16 +252,28 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 			log.Hash = log.GenerateUniqueHash()
 
 			// handle descriptions passed as extra data in v1
-			txdata, ok := txm.ExtraData.(*json.RawMessage)
-			if !ok {
-				// if it's invalid, set it to nil to avoid errors and corrupted json
-				txdata = nil
+			userOpHash := userop.GetHash(s.chainID)
+
+			// get user op message data
+			txdata, err := s.db.DataDB.GetData(fmt.Sprintf("userop:%s", userOpHash))
+			if err != nil && err != pgx.ErrNoRows {
+				// TODO: log this error somewhere
+				continue
 			}
 
 			if txdata != nil {
+				// we only know after submitting a transaction what the hash of the log will be
 				err = s.db.DataDB.UpsertData(log.Hash, txdata)
 				if err != nil {
 					// TODO: log this error somewhere
+					continue
+				}
+
+				// clean up user op message data
+				err = s.db.DataDB.DeleteData(fmt.Sprintf("userop:%s", userOpHash))
+				if err != nil {
+					// TODO: log this error somewhere
+					continue
 				}
 			}
 

@@ -14,16 +14,16 @@ import (
 )
 
 type Server struct {
-	chainID     *big.Int
-	db          *db.DB
-	n           *nostr.Nostr
-	evm         relay.EVMRequester
-	userOpQueue *queue.Service
-	pools       *ws.ConnectionPools
+	chainID *big.Int
+	db      *db.DB
+	n       *nostr.Nostr
+	useropq *queue.Service
+	evm     relay.EVMRequester
+	pools   *ws.ConnectionPools
 }
 
-func NewServer(chainID *big.Int, db *db.DB, n *nostr.Nostr, evm relay.EVMRequester, userOpQueue *queue.Service, pools *ws.ConnectionPools) *Server {
-	return &Server{chainID: chainID, db: db, n: n, evm: evm, userOpQueue: userOpQueue, pools: pools}
+func NewServer(chainID *big.Int, db *db.DB, n *nostr.Nostr, useropq *queue.Service, evm relay.EVMRequester, pools *ws.ConnectionPools) *Server {
+	return &Server{chainID: chainID, db: db, n: n, evm: evm, pools: pools}
 }
 
 func (s *Server) Start(port int, handler http.Handler) error {

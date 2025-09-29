@@ -65,6 +65,14 @@ github.com/comunifi/nostr-eth v0.0.21 h1:ScLySHraCE1So+5S4MSKj7wuwAPceGOkxpk8WeL
 github.com/comunifi/nostr-eth v0.0.21/go.mod h1:0znLOgSO4pDJxPf5Zfxs5Ivi4jvzyRXwfXMBDT5rUPc=
 github.com/comunifi/nostr-eth v0.0.24 h1:X/B69v/NIr1Wsx2Zr6GMoFG53f+cYWx94rZxzKaYpSU=
 github.com/comunifi/nostr-eth v0.0.24/go.mod h1:0znLOgSO4pDJxPf5Zfxs5Ivi4jvzyRXwfXMBDT5rUPc=
+github.com/comunifi/nostr-eth v0.0.26 h1:aN6JzTCalDKQBHNgI5ZfqfjCC9pl9DEQfy0ZyPBeyHk=
+github.com/comunifi/nostr-eth v0.0.26/go.mod h1:0znLOgSO4pDJxPf5Zfxs5Ivi4jvzyRXwfXMBDT5rUPc=
+github.com/comunifi/nostr-eth v0.0.27 h1:AshHWkySoeA/jfUHqa+8oaQYf1MELWdeRCjViT+CUW4=
+github.com/comunifi/nostr-eth v0.0.27/go.mod h1:0znLOgSO4pDJxPf5Zfxs5Ivi4jvzyRXwfXMBDT5rUPc=
+github.com/comunifi/nostr-eth v0.0.28 h1:u7LGPbPXcKl122A4ZbFiNAY8oF+Hr8OaDxkAK8UckBw=
+github.com/comunifi/nostr-eth v0.0.28/go.mod h1:0znLOgSO4pDJxPf5Zfxs5Ivi4jvzyRXwfXMBDT5rUPc=
+github.com/comunifi/nostr-eth v0.0.29 h1:9vRadyeSkzyS6M70/I1Nz6dEMbAqQT13bLb/iqZRHKI=
+github.com/comunifi/nostr-eth v0.0.29/go.mod h1:0znLOgSO4pDJxPf5Zfxs5Ivi4jvzyRXwfXMBDT5rUPc=
 github.com/consensys/gnark-crypto v0.18.0 h1:vIye/FqI50VeAr0B3dx+YjeIvmc3LWz4yEfbWBpTUf0=
 github.com/consensys/gnark-crypto v0.18.0/go.mod h1:L3mXGFTe1ZN+RSJ+CLjUt9x7PNdx8ubaYfDROyp2Z8c=
 github.com/cpuguy83/go-md2man/v2 v2.0.5 h1:ZtcqGrnekaHpVLArFSe4HK5DoKx1T0rq2DwVB0alcyc=
