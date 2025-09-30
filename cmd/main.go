@@ -89,8 +89,6 @@ func main() {
 		log.Fatal(err)
 	}
 	defer ndb.Close()
-
-	n := nostr.NewNostr(conf.RelayPrivateKey, &ndb, conf.RelayUrl)
 	////////////////////
 
 	////////////////////
@@ -156,15 +154,25 @@ func main() {
 	////////////////////
 
 	////////////////////
-	// indexer
-	if !*noindex {
-		log.Default().Println("starting indexer service...")
-
-		idx := indexer.NewIndexer(ctx, conf.RelayPrivateKey, chid, d, n, evm, pools)
-		go func() {
-			quitAck <- idx.Start()
-		}()
+	// pubkey
+	pubkey, err := common.PrivateKeyToPublicKey(conf.RelayPrivateKey)
+	if err != nil {
+		log.Fatal(err)
 	}
+
+	////////////////////
+
+	////////////////////
+	// nostr
+	relay := khatru.NewRelay()
+
+	relay.Info.Name = conf.RelayInfoName
+	relay.Info.PubKey = pubkey
+	relay.Info.Description = conf.RelayInfoDescription
+	relay.Info.Icon = conf.RelayInfoIcon
+
+	// nostr-service
+	n := nostr.NewNostr(conf.RelayPrivateKey, &ndb, relay, conf.RelayUrl)
 	////////////////////
 
 	////////////////////
@@ -205,27 +213,23 @@ func main() {
 
 	log.Default().Println("listening on port: ", *port)
 	////////////////////
-
 	////////////////////
-	// pubkey
-	pubkey, err := common.PrivateKeyToPublicKey(conf.RelayPrivateKey)
-	if err != nil {
-		log.Fatal(err)
+	// indexer
+	if !*noindex {
+		log.Default().Println("starting indexer service...")
+
+		idx := indexer.NewIndexer(ctx, conf.RelayPrivateKey, chid, d, n, evm, pools)
+		go func() {
+			quitAck <- idx.Start()
+		}()
 	}
-
 	////////////////////
-
 	////////////////////
 	// nostr
-	relay := khatru.NewRelay()
-
-	relay.Info.Name = conf.RelayInfoName
-	relay.Info.PubKey = pubkey
-	relay.Info.Description = conf.RelayInfoDescription
-	relay.Info.Icon = conf.RelayInfoIcon
-
+	println("NewRouter there are", len(relay.StoreEvent), "store events")
 	r := hooks.NewRouter(evm, d, n, useropq, chid, &ndb)
 	relay = r.AddHooks(relay)
+	println("AddHooks there are", len(relay.StoreEvent), "store events")
 
 	go func() {
 		log.Default().Println("relay running on port: 3334")

@@ -22,6 +22,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/nbd-wtf/go-nostr"
 )
 
@@ -231,7 +232,7 @@ func (s *Service) Send(r *http.Request) (any, error) {
 
 	// convert to nostr event
 	println("creating user op event")
-	ev, err := nostreth.CreateUserOpEvent(s.chainId, &addr, &entryPoint, data, userop, nostreth.EventTypeUserOpSubmitted)
+	ev, err := nostreth.CreateUserOpEvent(s.chainId, &addr, &entryPoint, data, nil, 0, userop, nostreth.EventTypeUserOpSubmitted)
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +275,47 @@ func (s *Service) Process(ctx context.Context, evt *nostr.Event) error {
 		return nil
 	}
 
-	println("processing user op event")
+	uop, err := nostreth.ParseUserOpEvent(evt)
+	if err != nil {
+		return err
+	}
+
+	if uop.EventType != nostreth.EventTypeUserOpSubmitted {
+		return nil
+	}
+
+	if uop.RetryCount >= 5 {
+		return nil
+	}
+
+	_, err = s.db.SponsorDB.GetSponsor(uop.Paymaster.Hex())
+	if err != nil && err != pgx.ErrNoRows {
+		return err
+	}
+
+	if err == pgx.ErrNoRows {
+		return nil
+	}
+
+	xdata, err := s.db.DataDB.GetData(fmt.Sprintf("userop:%s", uop.UserOpData.GetHash(s.chainId)))
+	if err != nil && err != pgx.ErrNoRows {
+		return err
+	}
+
+	// Create a new message
+	message := relay.NewTxMessage(s.chainId, evt, xdata)
+
+	// Enqueue the message
+	if uop.RetryCount > 0 {
+		go func() {
+			println("waiting 1 second before resubmitting user op event")
+			time.Sleep(time.Second * 1)
+			s.useropq.Enqueue(*message)
+		}()
+		return nil
+	}
+
+	s.useropq.Enqueue(*message)
 
 	return nil
 }

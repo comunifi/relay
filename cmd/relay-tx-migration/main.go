@@ -68,8 +68,6 @@ func main() {
 		log.Fatal(err)
 	}
 	defer ndb.Close()
-
-	n := nost.NewNostr(conf.RelayPrivateKey, &ndb, conf.RelayUrl)
 	////////////////////
 	////////////////////
 	// db
@@ -104,11 +102,16 @@ func main() {
 	relay.DeleteEvent = append(relay.DeleteEvent, ndb.DeleteEvent)
 	relay.ReplaceEvent = append(relay.ReplaceEvent, ndb.ReplaceEvent)
 
+	////////////////////
+	////////////////////
+	// nostr-service
+	n := nost.NewNostr(conf.RelayPrivateKey, &ndb, relay, conf.RelayUrl)
+
+	////////////////////
 	err = logs.MigrateLogs(ctx, evm, chid, group, conf.RelayPrivateKey, pubkey, d, n)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	////////////////////
 	log.Default().Println("data migration complete")
 }
