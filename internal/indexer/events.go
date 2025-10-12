@@ -2,11 +2,13 @@ package indexer
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"time"
 
 	nostreth "github.com/comunifi/nostr-eth"
+	"github.com/nbd-wtf/go-nostr"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -95,10 +97,25 @@ func (i *Indexer) ListenToLogs(ev *relay.Event, quitAck chan error) error {
 
 		l.Hash = l.GenerateUniqueHash()
 
-		txEv, err := nostreth.CreateTxLogEvent(*l)
-		if err != nil {
-			fmt.Println("Error creating tx log event:", err)
-			return nil
+		var txEv *nostr.Event
+		switch ev.Topic {
+		case nostreth.TopicERC20Transfer:
+			txEv, err = nostreth.CreateTxTransferEvent(*l)
+			if err != nil {
+				fmt.Println("Error creating tx log event:", err)
+				return err
+			}
+
+		default:
+			txEv, err = nostreth.CreateTxLogEvent(*l)
+			if err != nil {
+				fmt.Println("Error creating tx log event:", err)
+				return err
+			}
+		}
+
+		if txEv == nil {
+			return errors.New("something went wrong parsing an event from a log")
 		}
 
 		txEv, err = i.n.SignAndSaveEvent(i.ctx, txEv)

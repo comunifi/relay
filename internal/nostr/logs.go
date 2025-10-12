@@ -25,7 +25,7 @@ func (n *Nostr) GetLog(hash, chainID string) (*relay.LegacyLog, error) {
 		WHERE kind = $1 
 		AND tagvalues @> $2
 		LIMIT 1
-	`, nostreth.KindTxLog, pq.Array(tagValues))
+	`, nostreth.KindTxTransfer, pq.Array(tagValues))
 
 	var id, pubkey, content, sig string
 	var createdAt int64
@@ -37,7 +37,7 @@ func (n *Nostr) GetLog(hash, chainID string) (*relay.LegacyLog, error) {
 		return nil, err
 	}
 
-	var nlog nostreth.TxLogEvent
+	var nlog nostreth.TxTransferEvent
 
 	err = json.Unmarshal([]byte(content), &nlog)
 	if err != nil {
@@ -101,13 +101,13 @@ func (n *Nostr) GetAllPaginatedLogs(contract string, topic string, maxDate time.
 		AND EXISTS (
 			SELECT 1
 			FROM jsonb_array_elements(tags) AS tag
-			WHERE tag->>0 = 'topic' AND tag->>1 = $4
+			WHERE tag->>0 = 't' AND tag->>1 = $4
 		)
 		ORDER BY created_at DESC
 		LIMIT $5 OFFSET $6
 	`
 
-	args := []any{nostreth.KindTxLog, maxDate.Unix(), pq.Array(tagValues), topic, limit, offset}
+	args := []any{nostreth.KindTxTransfer, maxDate.Unix(), pq.Array(tagValues), topic, limit, offset}
 
 	rows, err := n.ndb.Query(query, args...)
 	if err != nil {
@@ -126,7 +126,7 @@ func (n *Nostr) GetAllPaginatedLogs(contract string, topic string, maxDate time.
 			return nil, err
 		}
 
-		var nlog nostreth.TxLogEvent
+		var nlog nostreth.TxTransferEvent
 		err = json.Unmarshal([]byte(content), &nlog)
 		if err != nil {
 			return nil, err
@@ -190,13 +190,13 @@ func (n *Nostr) GetAllNewLogs(contract string, topic string, fromDate time.Time,
 		AND EXISTS (
 			SELECT 1
 			FROM jsonb_array_elements(tags) AS tag
-			WHERE tag->>0 = 'topic' AND tag->>1 = $4
+			WHERE tag->>0 = 't' AND tag->>1 = $4
 		)
 		ORDER BY created_at DESC
 		LIMIT $5 OFFSET $6
 	`
 
-	args := []any{nostreth.KindTxLog, fromDate.Unix(), pq.Array(tagValues), topic, limit, offset}
+	args := []any{nostreth.KindTxTransfer, fromDate.Unix(), pq.Array(tagValues), topic, limit, offset}
 
 	rows, err := n.ndb.Query(query, args...)
 	if err != nil {
@@ -215,7 +215,7 @@ func (n *Nostr) GetAllNewLogs(contract string, topic string, fromDate time.Time,
 			return nil, err
 		}
 
-		var nlog nostreth.TxLogEvent
+		var nlog nostreth.TxTransferEvent
 		err = json.Unmarshal([]byte(content), &nlog)
 		if err != nil {
 			return nil, err
@@ -302,13 +302,13 @@ func (n *Nostr) GetPaginatedLogs(contract string, topic string, maxDate time.Tim
 		AND EXISTS (
 			SELECT 1
 			FROM jsonb_array_elements(tags) AS tag
-			WHERE tag->>0 = 'topic' AND tag->>1 = $4
+			WHERE tag->>0 = 't' AND tag->>1 = $4
 		)
 		ORDER BY created_at DESC
 		LIMIT $5 OFFSET $6
 	`
 
-	args := []any{nostreth.KindTxLog, maxDate.Unix(), pq.Array(tagValues), topic, limit, offset}
+	args := []any{nostreth.KindTxTransfer, maxDate.Unix(), pq.Array(tagValues), topic, limit, offset}
 
 	rows, err := n.ndb.Query(query, args...)
 	if err != nil {
@@ -327,7 +327,7 @@ func (n *Nostr) GetPaginatedLogs(contract string, topic string, maxDate time.Tim
 			return nil, err
 		}
 
-		var nlog nostreth.TxLogEvent
+		var nlog nostreth.TxTransferEvent
 		err = json.Unmarshal([]byte(content), &nlog)
 		if err != nil {
 			return nil, err
@@ -414,11 +414,11 @@ func (n *Nostr) GetNewLogs(contract string, topic string, fromDate time.Time, da
 		AND EXISTS (
 			SELECT 1
 			FROM jsonb_array_elements(tags) AS tag
-			WHERE tag->>0 = 'topic' AND tag->>1 = $4
+			WHERE tag->>0 = 't' AND tag->>1 = $4
 		)
 	`
 
-	args := []any{nostreth.KindTxLog, fromDate.Unix(), pq.Array(tagValues), topic}
+	args := []any{nostreth.KindTxTransfer, fromDate.Unix(), pq.Array(tagValues), topic}
 
 	// Add pagination
 	query += ` ORDER BY created_at DESC LIMIT $5 OFFSET $6`
@@ -426,7 +426,6 @@ func (n *Nostr) GetNewLogs(contract string, topic string, fromDate time.Time, da
 
 	rows, err := n.ndb.Query(query, args...)
 	if err != nil {
-		println("error getting new logs", err.Error())
 		return logs, err
 	}
 	defer rows.Close()
@@ -442,7 +441,7 @@ func (n *Nostr) GetNewLogs(contract string, topic string, fromDate time.Time, da
 			return nil, err
 		}
 
-		var nlog nostreth.TxLogEvent
+		var nlog nostreth.TxTransferEvent
 		err = json.Unmarshal([]byte(content), &nlog)
 		if err != nil {
 			return nil, err

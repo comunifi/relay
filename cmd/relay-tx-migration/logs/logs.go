@@ -3,6 +3,7 @@ package logs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math/big"
@@ -131,7 +132,10 @@ func MigrateLogs(ctx context.Context, evm *ethrequest.EthService, chainID *big.I
 
 				nostrethLog.Hash = nostrethLog.GenerateUniqueHash()
 
-				ev := convertLogToEvent(nostrethLog)
+				ev := convertLogToEvent(topic, nostrethLog)
+				if ev == nil {
+					return errors.New("something went wrong parsing an event from a log")
+				}
 
 				sev, err := n.SignAndSaveEvent(ctx, ev)
 				if err != nil && !strings.Contains(err.Error(), "event already exists") {
@@ -169,12 +173,15 @@ func MigrateLogs(ctx context.Context, evm *ethrequest.EthService, chainID *big.I
 	return nil
 }
 
-func convertLogToEvent(log *nostreth.Log) *nostr.Event {
-	ev, err := nostreth.CreateTxLogEvent(*log)
-	if err != nil {
-		fmt.Println("Error creating tx log event:", err)
-		return nil
+func convertLogToEvent(topic string, log *nostreth.Log) *nostr.Event {
+	var txEv *nostr.Event
+	switch topic {
+	case nostreth.TopicERC20Transfer:
+		txEv, _ = nostreth.CreateTxTransferEvent(*log)
+
+	default:
+		txEv, _ = nostreth.CreateTxLogEvent(*log)
 	}
 
-	return ev
+	return txEv
 }
