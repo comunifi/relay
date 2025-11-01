@@ -4,7 +4,7 @@ go 1.24.6
 
 require (
 	github.com/citizenwallet/smartcontracts v0.0.110
-	github.com/comunifi/nostr-eth v0.0.24
+	github.com/comunifi/nostr-eth v0.0.41
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0
 	github.com/ethereum/go-ethereum v1.16.3
 	github.com/fiatjaf/eventstore v0.16.2

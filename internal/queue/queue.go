@@ -75,6 +75,7 @@ func (s *Service) Start(p Processor) error {
 	for {
 		select {
 		case message := <-s.queue:
+			println("message", message.ID)
 			// Create a batch
 			batch := make([]relay.Message, 0, batchSize)
 
@@ -96,22 +97,24 @@ func (s *Service) Start(p Processor) error {
 				}
 			}
 
+			println("batch", len(batch))
+
 			msgs, errs := p.Process(batch)
 			for i, msg := range msgs {
 				err := errs[i]
 				if err != nil {
-					if msg.RetryCount < s.maxRetries {
-						// Retry the message
-						msg.RetryCount++
+					// if msg.RetryCount < s.maxRetries {
+					// 	// Retry the message
+					// 	msg.RetryCount++
 
-						if len(s.queue) < 1 && len(msgs) == 1 {
-							extraWait := time.Duration(msg.RetryCount) * time.Second
-							time.Sleep(extraWait)
-						}
+					// 	if len(s.queue) < 1 && len(msgs) == 1 {
+					// 		extraWait := time.Duration(msg.RetryCount) * time.Second
+					// 		time.Sleep(extraWait)
+					// 	}
 
-						s.Enqueue(msg)
-						continue
-					}
+					// 	s.Enqueue(msg)
+					// 	continue
+					// }
 
 					// Message has exceeded the maximum retries
 

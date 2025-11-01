@@ -12,6 +12,7 @@ import (
 	"github.com/comunifi/relay/internal/config"
 	"github.com/comunifi/relay/internal/db"
 	"github.com/comunifi/relay/internal/ethrequest"
+	"github.com/comunifi/relay/internal/hooks"
 	"github.com/comunifi/relay/internal/indexer"
 	"github.com/comunifi/relay/internal/nostr"
 	"github.com/comunifi/relay/internal/queue"
@@ -88,8 +89,6 @@ func main() {
 		log.Fatal(err)
 	}
 	defer ndb.Close()
-
-	n := nostr.NewNostr(conf.RelayPrivateKey, &ndb, conf.RelayUrl)
 	////////////////////
 
 	////////////////////
@@ -118,7 +117,7 @@ func main() {
 	// webhook
 	log.Default().Println("starting webhook service...")
 
-	w := webhook.NewMessager(conf.DiscordURL, conf.ChainName, *notify)
+	w := webhook.NewMessager(conf.DiscordURL, fmt.Sprintf("%s-relay", conf.ChainName), *notify)
 	defer func() {
 		if r := recover(); r != nil {
 			// in case of a panic, notify the webhook messager with an error notification
@@ -155,22 +154,32 @@ func main() {
 	////////////////////
 
 	////////////////////
-	// indexer
-	if !*noindex {
-		log.Default().Println("starting indexer service...")
-
-		idx := indexer.NewIndexer(ctx, conf.RelayPrivateKey, chid, d, n, evm, pools)
-		go func() {
-			quitAck <- idx.Start()
-		}()
+	// pubkey
+	pubkey, err := common.PrivateKeyToPublicKey(conf.RelayPrivateKey)
+	if err != nil {
+		log.Fatal(err)
 	}
+
+	////////////////////
+
+	////////////////////
+	// nostr
+	relay := khatru.NewRelay()
+
+	relay.Info.Name = conf.RelayInfoName
+	relay.Info.PubKey = pubkey
+	relay.Info.Description = conf.RelayInfoDescription
+	relay.Info.Icon = conf.RelayInfoIcon
+
+	// nostr-service
+	n := nostr.NewNostr(conf.RelayPrivateKey, &ndb, relay, conf.RelayUrl)
 	////////////////////
 
 	////////////////////
 	// userop queue
 	log.Default().Println("starting userop queue service...")
 
-	op := queue.NewUserOpService(ctx, chid, d, n, evm, pushqueue, pools)
+	op := queue.NewUserOpService(ctx, chid, d, n, evm)
 
 	useropq, qerr := queue.NewService("userop", 3, *useropqbf, ctx)
 	defer useropq.Close()
@@ -190,7 +199,7 @@ func main() {
 
 	////////////////////
 	// api
-	s := api.NewServer(chid, d, n, evm, useropq, pools)
+	s := api.NewServer(chid, d, n, useropq, evm, pools)
 
 	bu := bucket.NewBucket(conf.PinataBaseURL, conf.PinataAPIKey, conf.PinataAPISecret)
 
@@ -204,30 +213,23 @@ func main() {
 
 	log.Default().Println("listening on port: ", *port)
 	////////////////////
-
 	////////////////////
-	// pubkey
-	pubkey, err := common.PrivateKeyToPublicKey(conf.RelayPrivateKey)
-	if err != nil {
-		log.Fatal(err)
+	// indexer
+	if !*noindex {
+		log.Default().Println("starting indexer service...")
+
+		idx := indexer.NewIndexer(ctx, conf.RelayPrivateKey, chid, d, n, evm, pools)
+		go func() {
+			quitAck <- idx.Start()
+		}()
 	}
-
 	////////////////////
-
 	////////////////////
 	// nostr
-	relay := khatru.NewRelay()
-
-	relay.Info.Name = conf.RelayInfoName
-	relay.Info.PubKey = pubkey
-	relay.Info.Description = conf.RelayInfoDescription
-	relay.Info.Icon = conf.RelayInfoIcon
-
-	relay.StoreEvent = append(relay.StoreEvent, ndb.SaveEvent)
-	relay.QueryEvents = append(relay.QueryEvents, ndb.QueryEvents)
-	relay.CountEvents = append(relay.CountEvents, ndb.CountEvents)
-	relay.DeleteEvent = append(relay.DeleteEvent, ndb.DeleteEvent)
-	relay.ReplaceEvent = append(relay.ReplaceEvent, ndb.ReplaceEvent)
+	println("NewRouter there are", len(relay.StoreEvent), "store events")
+	r := hooks.NewRouter(evm, d, n, useropq, chid, &ndb)
+	relay = r.AddHooks(relay)
+	println("AddHooks there are", len(relay.StoreEvent), "store events")
 
 	go func() {
 		log.Default().Println("relay running on port: 3334")

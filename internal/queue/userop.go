@@ -13,8 +13,7 @@ import (
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/tokenEntryPoint"
 	nostreth "github.com/comunifi/nostr-eth"
 	"github.com/comunifi/relay/internal/db"
-	"github.com/comunifi/relay/internal/nostr"
-	"github.com/comunifi/relay/internal/ws"
+	nost "github.com/comunifi/relay/internal/nostr"
 	comm "github.com/comunifi/relay/pkg/common"
 	"github.com/comunifi/relay/pkg/relay"
 	"github.com/ethereum/go-ethereum/common"
@@ -29,16 +28,12 @@ type UserOpService struct {
 	mu         sync.Mutex
 	chainID    *big.Int
 	db         *db.DB
-	n          *nostr.Nostr
+	n          *nost.Nostr
 	evm        relay.EVMRequester
-	pushq      *Service
-	pools      *ws.ConnectionPools
 }
 
-func NewUserOpService(ctx context.Context, chainID *big.Int, db *db.DB, n *nostr.Nostr,
-	evm relay.EVMRequester,
-	pushq *Service,
-	pools *ws.ConnectionPools) *UserOpService {
+func NewUserOpService(ctx context.Context, chainID *big.Int, db *db.DB, n *nost.Nostr,
+	evm relay.EVMRequester) *UserOpService {
 	return &UserOpService{
 		ctx:        ctx,
 		inProgress: map[common.Address][]string{},
@@ -46,23 +41,22 @@ func NewUserOpService(ctx context.Context, chainID *big.Int, db *db.DB, n *nostr
 		db:         db,
 		n:          n,
 		evm:        evm,
-		pushq:      pushq,
-		pools:      pools,
 	}
 }
 
 // Process method processes messages of type []relay.Message and returns processed messages and an errors if any.
 func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Message, errors []error) {
+	println("processing", len(messages), "messages")
 	invalid = []relay.Message{}
 	errors = []error{}
 
 	messagesBySponsor := map[common.Address][]relay.Message{}
-	txmBySponsor := map[common.Address][]relay.UserOpMessage{}
+	opBySponsor := map[common.Address][]relay.UserOpMessage{}
 
 	// first organize messages by sponsors
 	for _, message := range messages {
 		// Type assertion to check if the msgs... is of type relay.UserOpMessage
-		txm, ok := message.Message.(relay.UserOpMessage)
+		opm, ok := message.Message.(relay.UserOpMessage)
 		if !ok {
 			// If the message is not of type relay.UserOpMessage, return an error
 			invalid = append(invalid, message)
@@ -70,8 +64,15 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 			continue
 		}
 
+		op, err := nostreth.ParseUserOpEvent(opm.Event)
+		if err != nil {
+			invalid = append(invalid, message)
+			errors = append(errors, err)
+			continue
+		}
+
 		// Fetch the sponsor's corresponding private key from the database
-		sponsorKey, err := s.db.SponsorDB.GetSponsor(txm.Paymaster.Hex())
+		sponsorKey, err := s.db.SponsorDB.GetSponsor(op.Paymaster.Hex())
 		if err != nil {
 			invalid = append(invalid, message)
 			errors = append(errors, err)
@@ -93,16 +94,25 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 		sponsor := crypto.PubkeyToAddress(*publicKey)
 
 		messagesBySponsor[sponsor] = append(messagesBySponsor[sponsor], message)
-		txmBySponsor[sponsor] = append(txmBySponsor[sponsor], txm)
+		opBySponsor[sponsor] = append(opBySponsor[sponsor], opm)
 	}
 
 	// go through each sponsor and process the messages
-	for sponsor, txms := range txmBySponsor {
-		sampleTxm := txms[0] // use the first txm to get information we need to process the messages
+	for sponsor, ops := range opBySponsor {
+		sampleOpEvent := ops[0] // use the first txm to get information we need to process the messages
 		msgs := messagesBySponsor[sponsor]
 
+		sampleOp, err := nostreth.ParseUserOpEvent(sampleOpEvent.Event)
+		if err != nil {
+			invalid = append(invalid, msgs...)
+			for range msgs {
+				errors = append(errors, err)
+			}
+			continue
+		}
+
 		// Fetch the sponsor's corresponding private key from the database
-		sponsorKey, err := s.db.SponsorDB.GetSponsor(sampleTxm.Paymaster.Hex())
+		sponsorKey, err := s.db.SponsorDB.GetSponsor(sampleOp.Paymaster.Hex())
 		if err != nil {
 			invalid = append(invalid, msgs...)
 			for range msgs {
@@ -147,14 +157,22 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 			continue
 		}
 
-		ops := []tokenEntryPoint.UserOperation{}
+		uops := []tokenEntryPoint.UserOperation{}
 
-		for _, txm := range txms {
-			ops = append(ops, tokenEntryPoint.UserOperation(txm.UserOp))
+		for _, op := range ops {
+			uop, err := nostreth.ParseUserOpEvent(op.Event)
+			if err != nil {
+				invalid = append(invalid, msgs...)
+				for range msgs {
+					errors = append(errors, err)
+				}
+				continue
+			}
+			uops = append(uops, tokenEntryPoint.UserOperation(uop.UserOpData))
 		}
 
 		// Pack the function name and arguments into calldata
-		data, err := parsedABI.Pack("handleOps", ops, sampleTxm.EntryPoint)
+		data, err := parsedABI.Pack("handleOps", uops, sampleOp.EntryPoint)
 		if err != nil {
 			invalid = append(invalid, msgs...)
 			for range msgs {
@@ -164,7 +182,7 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 		}
 
 		// Create a new transaction
-		tx, err := s.evm.NewTx(nonce, sponsor, sampleTxm.EntryPoint, data, sampleTxm.BumpGas)
+		tx, err := s.evm.NewTx(nonce, sponsor, *sampleOp.EntryPoint, data, sampleOp.RetryCount)
 		if err != nil {
 			invalid = append(invalid, msgs...)
 			for range msgs {
@@ -174,7 +192,7 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 		}
 
 		// Sign the transaction
-		signedTx, err := types.SignTx(tx, types.NewLondonSigner(sampleTxm.ChainId), privateKey)
+		signedTx, err := types.SignTx(tx, types.NewLondonSigner(s.chainID), privateKey)
 		if err != nil {
 			invalid = append(invalid, msgs...)
 			for range msgs {
@@ -203,14 +221,19 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 			continue
 		}
 
-		for _, txm := range txms {
+		for _, op := range ops {
 			// Detect if this user operation is a transfer using the call data
-
-			userop := txm.UserOp
-			data, ok := txm.Data.(*json.RawMessage)
-			if !ok {
-				data = nil
+			opevt, err := nostreth.ParseUserOpEvent(op.Event)
+			if err != nil {
+				invalid = append(invalid, msgs...)
+				for range msgs {
+					errors = append(errors, err)
+				}
+				continue
 			}
+
+			userop := opevt.UserOpData
+			data := opevt.Data
 
 			if data == nil {
 				// if there is no data, it is impossible for us to generate a stable unique hash
@@ -257,28 +280,47 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 
 			log.Hash = log.GenerateUniqueHash()
 
-			// handle descriptions passed as extra data in v1
-			txdata, ok := txm.ExtraData.(*json.RawMessage)
+			// get user op message data
+			txdata, ok := op.ExtraData.(*json.RawMessage)
 			if !ok {
-				// if it's invalid, set it to nil to avoid errors and corrupted json
 				txdata = nil
 			}
 
 			if txdata != nil {
+				// we only know after submitting a transaction what the hash of the log will be
+				// attach extra data to the log hash if provided
+				// this allows the indexing function to post a message in nostr
+				// only needed for v1 compatibility
 				err = s.db.DataDB.UpsertData(log.Hash, txdata)
 				if err != nil {
 					// TODO: log this error somewhere
+					continue
 				}
+			}
+
+			println("creating user op executed event")
+			ev, err := nostreth.UpdateUserOpEvent(s.chainID, userop, &signedTxHash, 0, nostreth.EventTypeUserOpExecuted, op.Event)
+			if err != nil {
+				// TODO: log this error somewhere
+				continue
+			}
+
+			println("signing and saving user op event")
+			ev, err = s.n.SignAndReplaceEvent(s.ctx, ev)
+			if err != nil {
+				// TODO: log this error somewhere
+				continue
 			}
 
 			// TODO: save an updated user op event
 
-			insertedLogs[txm.Paymaster] = append(insertedLogs[txm.Paymaster], log)
+			insertedLogs[*opevt.Paymaster] = append(insertedLogs[*opevt.Paymaster], log)
 		}
 
 		// Send the signed transaction
 		err = s.evm.SendTransaction(signedTx)
 		if err != nil {
+			println("error sending transaction", err.Error())
 			// If there's an error, check if it's an RPC error
 			e, ok := err.(rpc.Error)
 			if ok && e.ErrorCode() == -32010 {
@@ -286,11 +328,28 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 				// TODO: update user op event so it is re-submitted
 
 				for _, msg := range msgs {
-					txm, ok := msg.Message.(relay.UserOpMessage)
+					opm, ok := msg.Message.(relay.UserOpMessage)
 					if ok {
-						txm.BumpGas += 1
-						println("bumping gas for new message:", txm.BumpGas)
-						invalid = append(invalid, *relay.NewMessage(msg.ID, txm, msg.RetryCount, msg.Response))
+						opevt, err := nostreth.ParseUserOpEvent(opm.Event)
+						if err != nil {
+							// TODO: log this error somewhere
+							continue
+						}
+						userop := opevt.UserOpData
+
+						ev, err := nostreth.UpdateUserOpEvent(s.chainID, userop, &signedTxHash, opevt.RetryCount+1, nostreth.EventTypeUserOpSubmitted, opm.Event)
+						if err != nil {
+							// TODO: log this error somewhere
+							continue
+						}
+
+						ev, err = s.n.SignAndReplaceEvent(s.ctx, ev)
+						if err != nil {
+							// TODO: log this error somewhere
+							continue
+						}
+
+						invalid = append(invalid, msg)
 					}
 				}
 
@@ -359,16 +418,67 @@ func (s *UserOpService) Process(messages []relay.Message) (invalid []relay.Messa
 		}
 
 		// v1 compatibility, responds to the messages with the tx hash
-		for _, msg := range msgs {
-			msg.Respond(signedTxHash, nil)
-		}
+		// for _, msg := range msgs {
+		// 	msg.Respond(signedTxHash, nil)
+		// }
 
 		go func() {
 			// async wait for the transaction to be mined
-			err = s.evm.WaitForTx(signedTx, 16)
+			err = s.evm.WaitForTx(signedTx, 12)
 			if err != nil {
-				// TODO: update user op event so it is deleted
 				// TODO: log this error somewhere, submitted but then was not mined within a reasonable amount of time
+				for _, op := range ops {
+					opevt, err := nostreth.ParseUserOpEvent(op.Event)
+					if err != nil {
+						// TODO: log this error somewhere
+						continue
+					}
+					userop := opevt.UserOpData
+
+					ev, err := nostreth.UpdateUserOpEvent(s.chainID, userop, &signedTxHash, opevt.RetryCount, nostreth.EventTypeUserOpFailed, op.Event)
+					if err != nil {
+						// TODO: log this error somewhere
+						continue
+					}
+
+					ev, err = s.n.SignAndReplaceEvent(s.ctx, ev)
+					if err != nil {
+						// TODO: log this error somewhere
+						continue
+					}
+				}
+			}
+
+			if err == nil {
+				// tx was mined
+				for _, op := range ops {
+					// v1 compatibility
+					// clean up user op message data
+					opevt, err := nostreth.ParseUserOpEvent(op.Event)
+					if err != nil {
+						// TODO: log this error somewhere
+						continue
+					}
+					userop := opevt.UserOpData
+
+					ev, err := nostreth.UpdateUserOpEvent(s.chainID, userop, &signedTxHash, opevt.RetryCount, nostreth.EventTypeUserOpConfirmed, op.Event)
+					if err != nil {
+						// TODO: log this error somewhere
+						continue
+					}
+
+					ev, err = s.n.SignAndReplaceEvent(s.ctx, ev)
+					if err != nil {
+						// TODO: log this error somewhere
+						continue
+					}
+
+					err = s.db.DataDB.DeleteData(fmt.Sprintf("userop:%s", userop.GetHash(s.chainID)))
+					if err != nil {
+						// TODO: log this error somewhere
+						continue
+					}
+				}
 			}
 
 			// remove from inProgress

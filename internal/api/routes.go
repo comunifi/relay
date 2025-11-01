@@ -44,7 +44,7 @@ func (s *Server) AddRoutes(cr *chi.Mux, b *bucket.Bucket) *chi.Mux {
 	ev := events.NewHandlers(s.chainID.String(), s.db, s.pools)
 	rpc := rpc.NewHandlers()
 	pm := paymaster.NewService(s.evm, s.db)
-	uop := userop.NewService(s.evm, s.db, s.userOpQueue, s.chainID)
+	uop := userop.NewService(s.evm, s.db, s.n, s.useropq, s.chainID)
 	ch := chain.NewService(s.evm, s.chainID)
 	pr := profiles.NewService(b, s.evm)
 	pu := push.NewService(s.db)

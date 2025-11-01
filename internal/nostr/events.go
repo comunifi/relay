@@ -30,7 +30,7 @@ func (n *Nostr) GetEvent(id string) (*nostr.Event, error) {
 // GetMentionEvent returns the mention event for a given id
 func (n *Nostr) GetMentionEvent(id string) (*nostr.Event, error) {
 	// Collect unique values for tagvalues query
-	tagValues := []string{id, strconv.Itoa(nostreth.KindTxLog)}
+	tagValues := []string{id, strconv.Itoa(nostreth.KindTxTransfer)}
 
 	// Query the event table for mention events that reference the given event ID
 	row := n.ndb.QueryRow(`

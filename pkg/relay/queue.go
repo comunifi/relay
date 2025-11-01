@@ -6,7 +6,7 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/nbd-wtf/go-nostr"
 )
 
 type MessageResponse struct {
@@ -55,7 +55,7 @@ func (m *Message) WaitForResponse() (any, error) {
 		}
 
 		return resp.Data, nil
-	case <-time.After(time.Second * 12): // timeout so that we don't block the request forever in case the queue is stuck
+	case <-time.After(time.Second * 14): // timeout so that we don't block the request forever in case the queue is stuck
 		return nil, fmt.Errorf("request timeout")
 	}
 }
@@ -69,13 +69,13 @@ func (m *Message) Close() {
 }
 
 type UserOpMessage struct {
-	Paymaster  common.Address
-	EntryPoint common.Address
-	ChainId    *big.Int
-	UserOp     UserOp
-	Data       any
-	ExtraData  any
-	BumpGas    int
+	ChainId   *big.Int
+	Event     *nostr.Event
+	ExtraData any
+}
+
+func (m *UserOpMessage) ID() string {
+	return fmt.Sprintf("userop:%s%s", m.ChainId.String(), m.Event.ID)
 }
 
 func NewMessage(id string, message any, retryCount int, response *chan MessageResponse) *Message {
@@ -88,16 +88,13 @@ func NewMessage(id string, message any, retryCount int, response *chan MessageRe
 	}
 }
 
-func NewTxMessage(pm, entrypoint common.Address, chainId *big.Int, userop UserOp, data, xdata *json.RawMessage) *Message {
+func NewTxMessage(chainId *big.Int, event *nostr.Event, extraData *json.RawMessage) *Message {
 	op := UserOpMessage{
-		Paymaster:  pm,
-		EntryPoint: entrypoint,
-		ChainId:    chainId,
-		UserOp:     userop,
-		Data:       data,
-		ExtraData:  xdata,
+		ChainId:   chainId,
+		Event:     event,
+		ExtraData: extraData,
 	}
 
 	respch := make(chan MessageResponse)
-	return NewMessage(common.Bytes2Hex(userop.Signature), op, 0, &respch)
+	return NewMessage(op.ID(), op, 0, &respch)
 }
