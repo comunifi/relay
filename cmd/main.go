@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/comunifi/relay/internal/api"
+	"github.com/comunifi/relay/internal/blossom"
 	"github.com/comunifi/relay/internal/bucket"
 	"github.com/comunifi/relay/internal/config"
 	"github.com/comunifi/relay/internal/db"
@@ -230,6 +231,40 @@ func main() {
 	r := hooks.NewRouter(evm, d, n, useropq, chid, &ndb)
 	relay = r.AddHooks(relay)
 	println("AddHooks there are", len(relay.StoreEvent), "store events")
+
+	////////////////////
+	// blossom (media storage)
+	if conf.AWSS3BucketName != "" && conf.AWSAccessKeyID != "" && conf.AWSSecretAccessKey != "" {
+		log.Default().Println("starting blossom media service...")
+
+		// Create a separate database for blob metadata
+		blobDB := postgresql.PostgresBackend{
+			DatabaseURL: fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", conf.DBUser, conf.DBPassword, conf.DBHost, conf.DBPort, conf.DBName),
+		}
+		if err := blobDB.Init(); err != nil {
+			log.Fatal("failed to initialize blob metadata database:", err)
+		}
+		defer blobDB.Close()
+
+		blossomCfg := &blossom.BlossomConfig{
+			ServiceURL:      conf.RelayUrl,
+			AWSAccessKeyID:  conf.AWSAccessKeyID,
+			AWSSecretKey:    conf.AWSSecretAccessKey,
+			AWSRegion:       conf.AWSDefaultRegion,
+			AWSEndpointURL:  conf.AWSEndpointUrl,
+			AWSS3BucketName: conf.AWSS3BucketName,
+		}
+
+		_, err := blossom.NewBlossomService(ctx, relay, &blobDB, blossomCfg)
+		if err != nil {
+			log.Fatal("failed to initialize blossom service:", err)
+		}
+
+		log.Default().Println("blossom media service initialized with 50MB upload limit")
+	} else {
+		log.Default().Println("blossom media service disabled (S3 credentials not configured)")
+	}
+	////////////////////
 
 	go func() {
 		log.Default().Println("relay running on port: 3334")

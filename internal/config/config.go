@@ -28,6 +28,11 @@ type Config struct {
 	RelayInfoName        string `env:"RELAY_INFO_NAME"`
 	RelayInfoDescription string `env:"RELAY_INFO_DESCRIPTION"`
 	RelayInfoIcon        string `env:"RELAY_INFO_ICON"`
+	AWSAccessKeyID       string `env:"AWS_ACCESS_KEY_ID"`
+	AWSDefaultRegion     string `env:"AWS_DEFAULT_REGION"`
+	AWSEndpointUrl       string `env:"AWS_ENDPOINT_URL"`
+	AWSS3BucketName      string `env:"AWS_S3_BUCKET_NAME"`
+	AWSSecretAccessKey   string `env:"AWS_SECRET_ACCESS_KEY"`
 }
 
 func New(ctx context.Context, envpath string) (*Config, error) {
