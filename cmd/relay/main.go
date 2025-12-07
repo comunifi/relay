@@ -101,11 +101,6 @@ func main() {
 
 	////////////////////
 	// blossom (media storage)
-	log.Default().Printf("S3 config check - bucket: %q, key: %q, secret set: %v",
-		conf.AWSS3BucketName,
-		conf.AWSAccessKeyID,
-		conf.AWSSecretAccessKey != "")
-
 	if conf.AWSS3BucketName != "" && conf.AWSAccessKeyID != "" && conf.AWSSecretAccessKey != "" {
 		log.Default().Println("starting blossom media service...")
 

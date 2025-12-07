@@ -26,9 +26,9 @@ const authEvent = {
     ["t", "upload"],                    // Action type
     ["x", sha256],                      // File hash
     ["h", "your-group-id"],             // Group ID (NIP-29) - required for group uploads
-    ["expiration", String(Math.floor(Date.now() / 1000) + 300)]  // Optional: expires in 5 min
+    ["expiration", String(Math.floor(Date.now() / 1000) + 300)]  // REQUIRED: expires in 5 min
   ],
-  content: "Upload authorization"
+  content: ""
 };
 
 // Sign the event with the user's nostr private key
@@ -110,9 +110,9 @@ async function uploadImage(file: File, groupId: string, privateKey: string) {
 |-----|----------|-------------|
 | `t` | Yes | Action type: `upload`, `get`, `list`, or `delete` |
 | `x` | Yes | SHA-256 hash of the file |
+| `expiration` | **Yes** | Unix timestamp when auth expires (returns 404 if missing!) |
 | `h` | For groups | NIP-29 group ID - stores under group folder |
 | `size` | No | File size hint |
-| `expiration` | No | Unix timestamp when auth expires |
 
 ## Validation
 

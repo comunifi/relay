@@ -23,10 +23,13 @@ const (
 	// MaxFileSize is the maximum allowed upload size (50MB)
 	MaxFileSize = 50 * 1024 * 1024
 
-	// NIP-29 group membership event kinds
-	KindGroupAddUser    = 9000
-	KindGroupRemoveUser = 9001
-	KindGroupMembers    = 39002 // Group members list
+	// NIP-29 group event kinds
+	// https://github.com/nostr-protocol/nips/blob/master/29.md
+	KindPutUser       = 9000  // Add/update user in group (has h + p tags)
+	KindRemoveUser    = 9001  // Remove user from group (has h + p tags)
+	KindGroupMetadata = 39000 // Group metadata (has d tag)
+	KindGroupAdmins   = 39001 // Group admins list (has d tag)
+	KindGroupMembers  = 39002 // Group members list (has d tag with p tags)
 )
 
 type BlossomConfig struct {
@@ -252,7 +255,6 @@ func (s *BlossomService) rejectUpload(ctx context.Context, auth *nostr.Event, si
 	if groupID != "" {
 		isMember, err := s.isGroupMember(ctx, auth.PubKey, groupID)
 		if err != nil {
-			log.Printf("Error checking group membership: %v", err)
 			return true, "error checking group membership", 500
 		}
 		if !isMember {
@@ -267,25 +269,25 @@ func (s *BlossomService) rejectUpload(ctx context.Context, auth *nostr.Event, si
 }
 
 // isGroupMember checks if a pubkey is a member of a NIP-29 group
+// https://github.com/nostr-protocol/nips/blob/master/29.md
 func (s *BlossomService) isGroupMember(ctx context.Context, pubkey string, groupID string) (bool, error) {
-	// Query for group membership events
-	// In NIP-29, membership can be determined by:
-	// 1. Kind 39002 (group members list) events
-	// 2. Kind 9000 (add user) events without corresponding 9001 (remove user)
+	// NIP-29 membership can be determined by:
+	// 1. Kind 39002 (group members list) - has "d" tag with group ID, "p" tags with member pubkeys
+	// 2. Latest of kind 9000 (put-user) vs 9001 (remove-user) - has "h" tag with group ID, "p" tag with pubkey
 
 	// First, check for kind 39002 (group members list) which contains all members
-	filter := nostr.Filter{
+	membersFilter := nostr.Filter{
 		Kinds: []int{KindGroupMembers},
 		Tags:  nostr.TagMap{"d": []string{groupID}},
 		Limit: 1,
 	}
 
-	events, err := s.eventStore.QueryEvents(ctx, filter)
+	membersEvents, err := s.eventStore.QueryEvents(ctx, membersFilter)
 	if err != nil {
 		return false, fmt.Errorf("failed to query group members: %w", err)
 	}
 
-	for evt := range events {
+	for evt := range membersEvents {
 		// Check if pubkey is in the p tags
 		for _, tag := range evt.Tags {
 			if len(tag) >= 2 && tag[0] == "p" && tag[1] == pubkey {
@@ -294,57 +296,35 @@ func (s *BlossomService) isGroupMember(ctx context.Context, pubkey string, group
 		}
 	}
 
-	// If no members list found, check for add/remove user events
-	// Query for the most recent add user event for this pubkey
-	addFilter := nostr.Filter{
-		Kinds: []int{KindGroupAddUser},
+	// Per NIP-29: "The latest of either kind:9000 or kind:9001 events present in a group
+	// should tell a user that they are currently members of the group or if they were removed."
+	modFilter := nostr.Filter{
+		Kinds: []int{KindPutUser, KindRemoveUser},
 		Tags: nostr.TagMap{
 			"h": []string{groupID},
 			"p": []string{pubkey},
 		},
-		Limit: 1,
+		Limit: 10,
 	}
 
-	addEvents, err := s.eventStore.QueryEvents(ctx, addFilter)
+	modEvents, err := s.eventStore.QueryEvents(ctx, modFilter)
 	if err != nil {
-		return false, fmt.Errorf("failed to query add user events: %w", err)
+		return false, fmt.Errorf("failed to query moderation events: %w", err)
 	}
 
-	var latestAdd *nostr.Event
-	for evt := range addEvents {
-		if latestAdd == nil || evt.CreatedAt > latestAdd.CreatedAt {
-			latestAdd = evt
+	var latestEvent *nostr.Event
+	for evt := range modEvents {
+		if latestEvent == nil || evt.CreatedAt > latestEvent.CreatedAt {
+			latestEvent = evt
 		}
 	}
 
-	if latestAdd == nil {
-		// No add event found, user is not a member
+	if latestEvent == nil {
 		return false, nil
 	}
 
-	// Check if there's a more recent remove event
-	removeFilter := nostr.Filter{
-		Kinds: []int{KindGroupRemoveUser},
-		Tags: nostr.TagMap{
-			"h": []string{groupID},
-			"p": []string{pubkey},
-		},
-		Since: &latestAdd.CreatedAt,
-		Limit: 1,
-	}
-
-	removeEvents, err := s.eventStore.QueryEvents(ctx, removeFilter)
-	if err != nil {
-		return false, fmt.Errorf("failed to query remove user events: %w", err)
-	}
-
-	for range removeEvents {
-		// Found a remove event after the add event
-		return false, nil
-	}
-
-	// User was added and not removed
-	return true, nil
+	// If the latest event is put-user (9000), user is a member
+	return latestEvent.Kind == KindPutUser, nil
 }
 
 // buildS3Key constructs the S3 object key from group ID and sha256
