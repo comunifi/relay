@@ -10,6 +10,7 @@ import (
 	"github.com/comunifi/relay/internal/blossom"
 	"github.com/comunifi/relay/internal/config"
 	"github.com/comunifi/relay/internal/ethrequest"
+	"github.com/comunifi/relay/internal/groups"
 	"github.com/comunifi/relay/pkg/common"
 	"github.com/fiatjaf/eventstore/postgresql"
 	"github.com/fiatjaf/khatru"
@@ -98,6 +99,16 @@ func main() {
 	relay.CountEvents = append(relay.CountEvents, db.CountEvents)
 	relay.DeleteEvent = append(relay.DeleteEvent, db.DeleteEvent)
 	relay.ReplaceEvent = append(relay.ReplaceEvent, db.ReplaceEvent)
+
+	////////////////////
+	// NIP-29 Groups enforcement
+	log.Default().Println("initializing NIP-29 groups enforcement...")
+
+	groupsService := groups.NewGroupsService(&db, pubkey, conf.RelayPrivateKey)
+	groupsService.AddHooks(relay)
+
+	log.Default().Println("NIP-29 groups enforcement initialized (closed groups with admin/member roles)")
+	////////////////////
 
 	////////////////////
 	// blossom (media storage)

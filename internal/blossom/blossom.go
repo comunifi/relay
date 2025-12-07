@@ -22,9 +22,11 @@ import (
 const (
 	// MaxFileSize is the maximum allowed upload size (50MB)
 	MaxFileSize = 50 * 1024 * 1024
+)
 
-	// NIP-29 group event kinds
-	// https://github.com/nostr-protocol/nips/blob/master/29.md
+// NIP-29 group event kinds - imported from groups package
+// These are kept here for backward compatibility
+const (
 	KindPutUser       = 9000  // Add/update user in group (has h + p tags)
 	KindRemoveUser    = 9001  // Remove user from group (has h + p tags)
 	KindGroupMetadata = 39000 // Group metadata (has d tag)
