@@ -101,10 +101,16 @@ func main() {
 
 	////////////////////
 	// blossom (media storage)
+	log.Default().Printf("S3 config check - bucket: %q, key: %q, secret set: %v",
+		conf.AWSS3BucketName,
+		conf.AWSAccessKeyID,
+		conf.AWSSecretAccessKey != "")
+
 	if conf.AWSS3BucketName != "" && conf.AWSAccessKeyID != "" && conf.AWSSecretAccessKey != "" {
 		log.Default().Println("starting blossom media service...")
 
-		// Create a separate database for blob metadata
+		// Create a separate database connection for blob metadata
+		// Note: Using same DB for simplicity, but could use a separate DB in production
 		blobDB := postgresql.PostgresBackend{
 			DatabaseURL: fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", conf.DBUser, conf.DBPassword, conf.DBHost, conf.DBPort, conf.DBName),
 		}
@@ -122,7 +128,8 @@ func main() {
 			AWSS3BucketName: conf.AWSS3BucketName,
 		}
 
-		_, err := blossom.NewBlossomService(ctx, relay, &blobDB, blossomCfg)
+		// Pass blobDB for blob metadata, and db for querying group membership events
+		_, err := blossom.NewBlossomService(ctx, relay, &blobDB, &db, blossomCfg)
 		if err != nil {
 			log.Fatal("failed to initialize blossom service:", err)
 		}

@@ -49,15 +49,19 @@ type BlossomService struct {
 }
 
 // NewBlossomService creates a new blossom service with S3 backend
-func NewBlossomService(ctx context.Context, relay *khatru.Relay, blobStore eventstore.Store, cfg *BlossomConfig) (*BlossomService, error) {
+// - blobStore: used for blob metadata storage (can be separate from relay events)
+// - eventStore: used for querying group membership events (should be the main relay eventstore)
+func NewBlossomService(ctx context.Context, relay *khatru.Relay, blobStore eventstore.Store, eventStore eventstore.Store, cfg *BlossomConfig) (*BlossomService, error) {
 	// Create S3 client
 	s3Client, err := createS3Client(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create S3 client: %w", err)
 	}
 
-	// Create blossom server
+	// Create blossom server - this sets up HTTP routes on the relay
+	log.Printf("Setting up blossom routes on relay for service URL: %s", cfg.ServiceURL)
 	bl := blossom.New(relay, cfg.ServiceURL)
+	log.Printf("Blossom routes configured: /upload, /{sha256}, /list/{pubkey}")
 
 	// Set up blob metadata store
 	bl.Store = blossom.EventStoreBlobIndexWrapper{
@@ -69,7 +73,7 @@ func NewBlossomService(ctx context.Context, relay *khatru.Relay, blobStore event
 		config:     cfg,
 		s3Client:   s3Client,
 		blossom:    bl,
-		eventStore: blobStore,
+		eventStore: eventStore,
 	}
 
 	// Configure storage functions
