@@ -20,9 +20,12 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
-// NIP-29 Event Kinds
+// Event Kinds
 const (
-	// Moderation events (user-generated, relay-validated)
+	// Standard Nostr events
+	KindProfile = 0 // User profile metadata (NIP-01)
+
+	// NIP-29 Moderation events (user-generated, relay-validated)
 	KindPutUser      = 9000 // Add user to group / assign role
 	KindRemoveUser   = 9001 // Remove user from group
 	KindEditMetadata = 9002 // Edit group metadata
@@ -36,10 +39,10 @@ const (
 	KindLeaveRequest = 9022 // Request to leave a group
 
 	// Group content events (require h tag)
-	KindGroupChat      = 9   // Short text note in group
-	KindGroupReply     = 10  // Reply in group
-	KindGroupThreaded  = 11  // Threaded discussion
-	KindGroupChatReply = 12  // Reply to chat
+	KindGroupChat      = 9  // Short text note in group
+	KindGroupReply     = 10 // Reply in group
+	KindGroupThreaded  = 11 // Threaded discussion
+	KindGroupChatReply = 12 // Reply to chat
 
 	// Relay-generated metadata events
 	KindGroupMetadata = 39000 // Group metadata
@@ -84,6 +87,8 @@ func (g *GroupsService) AddHooks(relay *khatru.Relay) {
 // ValidateEvent validates incoming events according to NIP-29 rules for closed groups
 func (g *GroupsService) ValidateEvent(ctx context.Context, event *nostr.Event) (reject bool, msg string) {
 	switch event.Kind {
+	case KindProfile:
+		return g.validateProfile(ctx, event)
 	case KindCreateGroup:
 		return g.validateCreateGroup(ctx, event)
 	case KindPutUser:
@@ -102,6 +107,8 @@ func (g *GroupsService) ValidateEvent(ctx context.Context, event *nostr.Event) (
 		return g.validateLeaveRequest(ctx, event)
 	case KindGroupChat, KindGroupReply, KindGroupThreaded, KindGroupChatReply:
 		return g.validateGroupContent(ctx, event)
+	case KindGroupMetadata:
+		return g.validateGroupMetadataEvent(ctx, event)
 	default:
 		// Check if event has an h tag (group-targeted event)
 		if hasHTag(event) {
@@ -291,6 +298,16 @@ func (g *GroupsService) validateJoinRequest(ctx context.Context, event *nostr.Ev
 		return true, "group does not exist"
 	}
 
+	// Check if user is already a member (NIP-29: reject with "duplicate:" prefix)
+	isMember, err := g.IsMember(ctx, event.PubKey, groupID)
+	if err != nil {
+		log.Printf("Error checking member status: %v", err)
+		return true, "internal error checking membership"
+	}
+	if isMember {
+		return true, "duplicate: already a member of this group"
+	}
+
 	// Allow the join request to be stored (admins can see it and act on it)
 	return false, ""
 }
@@ -335,6 +352,55 @@ func (g *GroupsService) validateGroupContent(ctx context.Context, event *nostr.E
 		return true, "only group members can post content"
 	}
 
+	return false, ""
+}
+
+// validateProfile validates kind 0 profile events for username uniqueness
+// The username is taken from the "u" tag and must be unique across all users
+func (g *GroupsService) validateProfile(ctx context.Context, event *nostr.Event) (bool, string) {
+	username := getUTag(event)
+	if username == "" {
+		// No username tag, allow the profile update
+		return false, ""
+	}
+
+	// Query for existing kind 0 events with this u tag
+	profileFilter := nostr.Filter{
+		Kinds: []int{KindProfile},
+		Tags:  nostr.TagMap{"u": []string{username}},
+		Limit: 10,
+	}
+
+	events, err := g.eventStore.QueryEvents(ctx, profileFilter)
+	if err != nil {
+		log.Printf("Error checking username uniqueness: %v", err)
+		return true, "internal error checking username"
+	}
+
+	for evt := range events {
+		// If we find a profile with this username from a different pubkey, reject
+		if evt.PubKey != event.PubKey {
+			return true, fmt.Sprintf("username '%s' is already taken", username)
+		}
+	}
+
+	// Username is available or belongs to the same user (updating their profile)
+	return false, ""
+}
+
+// validateGroupMetadataEvent validates kind 39000 group metadata events
+// For personal groups, the p tag must match the author's pubkey
+func (g *GroupsService) validateGroupMetadataEvent(ctx context.Context, event *nostr.Event) (bool, string) {
+	// Check if this is a personal group (has p tag)
+	ownerPubkey := getFirstPTag(event)
+	if ownerPubkey != "" {
+		// Personal group: p tag must match the author
+		if ownerPubkey != event.PubKey {
+			return true, "cannot create personal group for another user"
+		}
+	}
+
+	// Allow the event
 	return false, ""
 }
 
@@ -435,6 +501,7 @@ func (g *GroupsService) handleUserRemoved(ctx context.Context, event *nostr.Even
 }
 
 // handleUserLeft processes when a user voluntarily leaves a group
+// Per NIP-29: "The relay will automatically issue a kind:9001 in response removing this user"
 func (g *GroupsService) handleUserLeft(ctx context.Context, event *nostr.Event) {
 	groupID := getHTag(event)
 	if groupID == "" {
@@ -443,15 +510,31 @@ func (g *GroupsService) handleUserLeft(ctx context.Context, event *nostr.Event) 
 
 	log.Printf("User %s left group %s", event.PubKey[:8], groupID)
 
-	// Remove from admins list if present
-	admins, _ := g.getAdmins(ctx, groupID)
-	admins = removeFromSlice(admins, event.PubKey)
-	g.generateAdminsList(ctx, groupID, admins)
+	// Generate kind 9001 (remove-user) event signed by relay
+	// This follows NIP-29 which requires the relay to issue a 9001 in response
+	removeEvent := &nostr.Event{
+		Kind:      KindRemoveUser,
+		PubKey:    g.relayPubkey,
+		CreatedAt: nostr.Timestamp(time.Now().Unix()),
+		Tags: nostr.Tags{
+			{"h", groupID},
+			{"p", event.PubKey},
+		},
+		Content: "user left the group",
+	}
 
-	// Remove from members list
-	members, _ := g.getMembers(ctx, groupID)
-	members = removeFromSlice(members, event.PubKey)
-	g.generateMembersList(ctx, groupID, members)
+	if err := removeEvent.Sign(g.relaySecretKey); err != nil {
+		log.Printf("Error signing remove-user event for leave request: %v", err)
+		return
+	}
+
+	if err := g.eventStore.SaveEvent(ctx, removeEvent); err != nil {
+		log.Printf("Error saving remove-user event for leave request: %v", err)
+		return
+	}
+
+	// handleUserRemoved will be triggered by OnEventSaved for the 9001 event
+	// which will update the 39001 (admins) and 39002 (members) lists
 }
 
 // handleMetadataEdited processes when group metadata is edited
@@ -470,36 +553,75 @@ func (g *GroupsService) handleMetadataEdited(ctx context.Context, event *nostr.E
 // generateGroupMetadata creates/updates a kind 39000 group metadata event
 func (g *GroupsService) generateGroupMetadata(ctx context.Context, groupID string, sourceEvent *nostr.Event) {
 	// Extract metadata from source event tags
-	name := ""
-	about := ""
-	picture := ""
-
-	for _, tag := range sourceEvent.Tags {
-		if len(tag) >= 2 {
-			switch tag[0] {
-			case "name":
-				name = tag[1]
-			case "about":
-				about = tag[1]
-			case "picture":
-				picture = tag[1]
-			}
-		}
+	// We preserve all tags except structural ones (h, p, e, client, client_sig)
+	skipTags := map[string]bool{
+		"h":          true,
+		"p":          true,
+		"e":          true,
+		"client":     true,
+		"client_sig": true,
 	}
 
 	tags := nostr.Tags{
 		{"d", groupID},
-		{"closed"},        // All groups are closed
-		{"private"},       // Groups are private by default
 	}
-	if name != "" {
-		tags = append(tags, nostr.Tag{"name", name})
+
+	// Check for personal group tag and add p tag if present
+	personalOwner := ""
+	hasOpenFlag := false
+	hasPublicFlag := false
+
+	for _, tag := range sourceEvent.Tags {
+		if len(tag) >= 2 && tag[0] == "personal" {
+			personalOwner = tag[1]
+		}
+		if len(tag) >= 1 && tag[0] == "open" {
+			hasOpenFlag = true
+		}
+		if len(tag) >= 1 && tag[0] == "public" {
+			hasPublicFlag = true
+		}
 	}
-	if about != "" {
-		tags = append(tags, nostr.Tag{"about", about})
+
+	// Personal groups get a "p" tag with the owner's pubkey
+	// and are always private and closed
+	// Also keep the "personal" tag for legacy support
+	if personalOwner != "" {
+		tags = append(tags, nostr.Tag{"p", personalOwner})
+		tags = append(tags, nostr.Tag{"personal", personalOwner})
+		tags = append(tags, nostr.Tag{"closed"})
+		tags = append(tags, nostr.Tag{"private"})
+	} else {
+		// Non-personal groups: use flags from source event with defaults
+		if hasOpenFlag {
+			tags = append(tags, nostr.Tag{"open"})
+		} else {
+			tags = append(tags, nostr.Tag{"closed"})
+		}
+
+		if hasPublicFlag {
+			tags = append(tags, nostr.Tag{"public"})
+		} else {
+			tags = append(tags, nostr.Tag{"private"})
+		}
 	}
-	if picture != "" {
-		tags = append(tags, nostr.Tag{"picture", picture})
+
+	// Add all other metadata tags from source event
+	for _, tag := range sourceEvent.Tags {
+		if len(tag) == 0 {
+			continue
+		}
+		tagName := tag[0]
+
+		// Skip structural tags and flags we already handled
+		if skipTags[tagName] || tagName == "personal" || tagName == "open" || tagName == "public" || tagName == "closed" || tagName == "private" {
+			continue
+		}
+
+		// Add the tag as-is
+		if len(tag) >= 2 && tag[1] != "" {
+			tags = append(tags, nostr.Tag{tagName, tag[1]})
+		}
 	}
 
 	metadata := &nostr.Event{
@@ -855,6 +977,24 @@ func getHTag(event *nostr.Event) string {
 	return ""
 }
 
+// getUTag extracts the username from the "u" tag
+func getUTag(event *nostr.Event) string {
+	tag := event.Tags.GetFirst([]string{"u", ""})
+	if tag != nil && len(*tag) >= 2 {
+		return (*tag)[1]
+	}
+	return ""
+}
+
+// getFirstPTag extracts the first p tag value (used for personal group owner)
+func getFirstPTag(event *nostr.Event) string {
+	tag := event.Tags.GetFirst([]string{"p", ""})
+	if tag != nil && len(*tag) >= 2 {
+		return (*tag)[1]
+	}
+	return ""
+}
+
 // getPTags returns all p tag values with their optional role
 // Returns slice of [pubkey, role?]
 func getPTags(event *nostr.Event) [][]string {
@@ -947,4 +1087,3 @@ func (m *GroupMetadata) SerializeMetadata() (string, error) {
 	}
 	return string(data), nil
 }
-
