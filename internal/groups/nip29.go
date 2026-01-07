@@ -550,6 +550,33 @@ func (g *GroupsService) handleMetadataEdited(ctx context.Context, event *nostr.E
 	g.generateGroupMetadata(ctx, groupID, event)
 }
 
+// deleteOldMetadataEvent removes existing events of the given kind for a group, excluding a specific event ID
+func (g *GroupsService) deleteOldMetadataEvent(ctx context.Context, kind int, groupID string, excludeEventID string) {
+	// Check both "d" and "h" tags to catch any legacy events
+	for _, tagKey := range []string{"d", "h"} {
+		filter := nostr.Filter{
+			Kinds: []int{kind},
+			Tags:  nostr.TagMap{tagKey: []string{groupID}},
+		}
+
+		eventsCh, err := g.eventStore.QueryEvents(ctx, filter)
+		if err != nil {
+			log.Printf("Error querying old %d events: %v", kind, err)
+			continue
+		}
+
+		for event := range eventsCh {
+			// Skip the newly created event
+			if event.ID == excludeEventID {
+				continue
+			}
+			if err := g.eventStore.DeleteEvent(ctx, event); err != nil {
+				log.Printf("Error deleting old event %s: %v", event.ID[:8], err)
+			}
+		}
+	}
+}
+
 // generateGroupMetadata creates/updates a kind 39000 group metadata event
 func (g *GroupsService) generateGroupMetadata(ctx context.Context, groupID string, sourceEvent *nostr.Event) {
 	// Extract metadata from source event tags
@@ -639,7 +666,11 @@ func (g *GroupsService) generateGroupMetadata(ctx context.Context, groupID strin
 
 	if err := g.eventStore.SaveEvent(ctx, metadata); err != nil {
 		log.Printf("Error saving group metadata event: %v", err)
+		return
 	}
+
+	// Delete old metadata events after successful save
+	g.deleteOldMetadataEvent(ctx, KindGroupMetadata, groupID, metadata.ID)
 }
 
 // generateAdminsList creates/updates a kind 39001 admins list event
@@ -667,7 +698,11 @@ func (g *GroupsService) generateAdminsList(ctx context.Context, groupID string, 
 
 	if err := g.eventStore.SaveEvent(ctx, event); err != nil {
 		log.Printf("Error saving admins list event: %v", err)
+		return
 	}
+
+	// Delete old admins list events after successful save
+	g.deleteOldMetadataEvent(ctx, KindGroupAdmins, groupID, event.ID)
 }
 
 // generateMembersList creates/updates a kind 39002 members list event
@@ -695,7 +730,11 @@ func (g *GroupsService) generateMembersList(ctx context.Context, groupID string,
 
 	if err := g.eventStore.SaveEvent(ctx, event); err != nil {
 		log.Printf("Error saving members list event: %v", err)
+		return
 	}
+
+	// Delete old members list events after successful save
+	g.deleteOldMetadataEvent(ctx, KindGroupMembers, groupID, event.ID)
 }
 
 // IsAdmin checks if a pubkey is an admin of a group
