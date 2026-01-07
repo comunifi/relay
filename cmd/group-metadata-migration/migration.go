@@ -275,7 +275,7 @@ func (m *Migrator) extractMetadata(state *GroupState, event *nostr.Event) {
 	}
 }
 
-// deleteOldMetadata removes existing 39xxx events for the group
+// deleteOldMetadata removes existing 39xxx events for the group from any author
 func (m *Migrator) deleteOldMetadata(ctx context.Context, groupID string) error {
 	if m.dryRun {
 		log.Printf("  [DRY RUN] would delete old 39000, 39001, 39002 events")
@@ -285,20 +285,23 @@ func (m *Migrator) deleteOldMetadata(ctx context.Context, groupID string) error 
 	kinds := []int{groups.KindGroupMetadata, groups.KindGroupAdmins, groups.KindGroupMembers}
 
 	for _, kind := range kinds {
-		filter := nostr.Filter{
-			Kinds:   []int{kind},
-			Authors: []string{m.relayPubkey},
-			Tags:    nostr.TagMap{"d": []string{groupID}},
-		}
+		// Query both "d" tag (NIP-29 standard) and "h" tag (legacy) to catch all old events
+		for _, tagKey := range []string{"d", "h"} {
+			filter := nostr.Filter{
+				Kinds: []int{kind},
+				Tags:  nostr.TagMap{tagKey: []string{groupID}},
+			}
 
-		eventsCh, err := m.eventStore.QueryEvents(ctx, filter)
-		if err != nil {
-			return fmt.Errorf("failed to query kind %d: %w", kind, err)
-		}
+			eventsCh, err := m.eventStore.QueryEvents(ctx, filter)
+			if err != nil {
+				return fmt.Errorf("failed to query kind %d with %s tag: %w", kind, tagKey, err)
+			}
 
-		for event := range eventsCh {
-			if err := m.eventStore.DeleteEvent(ctx, event); err != nil {
-				log.Printf("  warning: failed to delete event %s: %v", event.ID[:8], err)
+			for event := range eventsCh {
+				log.Printf("  deleting old event %s (kind %d, %s tag, author %s)", event.ID[:8], kind, tagKey, event.PubKey[:8])
+				if err := m.eventStore.DeleteEvent(ctx, event); err != nil {
+					log.Printf("  warning: failed to delete event %s: %v", event.ID[:8], err)
+				}
 			}
 		}
 	}
