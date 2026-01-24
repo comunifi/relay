@@ -29,6 +29,7 @@ const (
 const (
 	KindPutUser       = 9000  // Add/update user in group (has h + p tags)
 	KindRemoveUser    = 9001  // Remove user from group (has h + p tags)
+	KindCreateGroup   = 9007  // Create a new group
 	KindGroupMetadata = 39000 // Group metadata (has d tag)
 	KindGroupAdmins   = 39001 // Group admins list (has d tag)
 	KindGroupMembers  = 39002 // Group members list (has d tag with p tags)
@@ -273,11 +274,16 @@ func (s *BlossomService) rejectUpload(ctx context.Context, auth *nostr.Event, si
 // isGroupMember checks if a pubkey is a member of a NIP-29 group
 // https://github.com/nostr-protocol/nips/blob/master/29.md
 func (s *BlossomService) isGroupMember(ctx context.Context, pubkey string, groupID string) (bool, error) {
-	// NIP-29 membership can be determined by:
-	// 1. Kind 39002 (group members list) - has "d" tag with group ID, "p" tags with member pubkeys
-	// 2. Latest of kind 9000 (put-user) vs 9001 (remove-user) - has "h" tag with group ID, "p" tag with pubkey
+	// Admins are also members - check admin status first
+	isAdmin, err := s.isGroupAdmin(ctx, pubkey, groupID)
+	if err != nil {
+		return false, fmt.Errorf("failed to check admin status: %w", err)
+	}
+	if isAdmin {
+		return true, nil
+	}
 
-	// First, check for kind 39002 (group members list) which contains all members
+	// Check relay-generated members list (kind 39002)
 	membersFilter := nostr.Filter{
 		Kinds: []int{KindGroupMembers},
 		Tags:  nostr.TagMap{"d": []string{groupID}},
@@ -327,6 +333,51 @@ func (s *BlossomService) isGroupMember(ctx context.Context, pubkey string, group
 
 	// If the latest event is put-user (9000), user is a member
 	return latestEvent.Kind == KindPutUser, nil
+}
+
+// isGroupAdmin checks if a pubkey is an admin of a NIP-29 group
+func (s *BlossomService) isGroupAdmin(ctx context.Context, pubkey string, groupID string) (bool, error) {
+	// First check relay-generated admins list (kind 39001)
+	adminsFilter := nostr.Filter{
+		Kinds: []int{KindGroupAdmins},
+		Tags:  nostr.TagMap{"d": []string{groupID}},
+		Limit: 1,
+	}
+
+	adminsEvents, err := s.eventStore.QueryEvents(ctx, adminsFilter)
+	if err != nil {
+		return false, fmt.Errorf("failed to query admins list: %w", err)
+	}
+
+	for evt := range adminsEvents {
+		// Check if pubkey is in the p tags
+		for _, tag := range evt.Tags {
+			if len(tag) >= 2 && tag[0] == "p" && tag[1] == pubkey {
+				return true, nil
+			}
+		}
+	}
+
+	// Fallback: Check if this user created the group (kind 9007)
+	// Group creators are automatically admins
+	createFilter := nostr.Filter{
+		Kinds:   []int{KindCreateGroup},
+		Authors: []string{pubkey},
+		Tags:    nostr.TagMap{"h": []string{groupID}},
+		Limit:   1,
+	}
+
+	createEvents, err := s.eventStore.QueryEvents(ctx, createFilter)
+	if err != nil {
+		return false, fmt.Errorf("failed to query group creation: %w", err)
+	}
+
+	for range createEvents {
+		// User created the group, they're admin
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // buildS3Key constructs the S3 object key from group ID and sha256
