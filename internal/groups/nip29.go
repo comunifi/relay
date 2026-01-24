@@ -25,6 +25,13 @@ const (
 	// Standard Nostr events
 	KindProfile = 0 // User profile metadata (NIP-01)
 
+	// NIP-28 Public Chat channel events
+	KindChannelCreate   = 40 // Create channel
+	KindChannelMetadata = 41 // Set channel metadata
+	KindChannelMessage  = 42 // Channel message
+	KindHideMessage     = 43 // Hide message
+	KindMuteUser        = 44 // Mute user
+
 	// NIP-29 Moderation events (user-generated, relay-validated)
 	KindPutUser      = 9000 // Add user to group / assign role
 	KindRemoveUser   = 9001 // Remove user from group
@@ -49,6 +56,9 @@ const (
 	KindGroupAdmins   = 39001 // Group admins list
 	KindGroupMembers  = 39002 // Group members list
 	KindGroupRoles    = 39003 // Group roles definition
+
+	// Relay-generated metadata for group channels
+	KindGroupChannels = 39004 // Group channels list and metadata
 )
 
 // Role constants
@@ -89,6 +99,10 @@ func (g *GroupsService) ValidateEvent(ctx context.Context, event *nostr.Event) (
 	switch event.Kind {
 	case KindProfile:
 		return g.validateProfile(ctx, event)
+	case KindChannelCreate:
+		return g.validateChannelCreate(ctx, event)
+	case KindChannelMetadata:
+		return g.validateChannelMetadata(ctx, event)
 	case KindCreateGroup:
 		return g.validateCreateGroup(ctx, event)
 	case KindPutUser:
@@ -355,6 +369,108 @@ func (g *GroupsService) validateGroupContent(ctx context.Context, event *nostr.E
 	return false, ""
 }
 
+// validateChannelCreate validates creating a channel (NIP-28 kind 40) scoped to a group.
+// Only group members can create channels, and an h tag (group ID) is required.
+func (g *GroupsService) validateChannelCreate(ctx context.Context, event *nostr.Event) (bool, string) {
+	groupID := getHTag(event)
+	if groupID == "" {
+		return true, "missing h tag (group ID) for channel creation"
+	}
+
+	// Ensure the group exists
+	exists, err := g.groupExists(ctx, groupID)
+	if err != nil {
+		log.Printf("Error checking group existence for channel creation: %v", err)
+		return true, "internal error checking group"
+	}
+	if !exists {
+		return true, "group does not exist"
+	}
+
+	// Only members can create channels
+	isMember, err := g.IsMember(ctx, event.PubKey, groupID)
+	if err != nil {
+		log.Printf("Error checking member status for channel creation: %v", err)
+		return true, "internal error checking membership"
+	}
+	if !isMember {
+		return true, "only group members can create channels"
+	}
+
+	// Validate that content, if present, is valid JSON per NIP-28
+	if event.Content != "" {
+		var meta struct {
+			Name    string   `json:"name,omitempty"`
+			About   string   `json:"about,omitempty"`
+			Picture string   `json:"picture,omitempty"`
+			Relays  []string `json:"relays,omitempty"`
+		}
+		if err := json.Unmarshal([]byte(event.Content), &meta); err != nil {
+			return true, "invalid channel metadata content (must be JSON)"
+		}
+	}
+
+	return false, ""
+}
+
+// validateChannelMetadata validates updating channel metadata (NIP-28 kind 41) scoped to a group.
+// Only group members can modify channel metadata. Requires h tag (group ID) and e tag (channel ID).
+func (g *GroupsService) validateChannelMetadata(ctx context.Context, event *nostr.Event) (bool, string) {
+	groupID := getHTag(event)
+	if groupID == "" {
+		return true, "missing h tag (group ID) for channel metadata"
+	}
+
+	// Ensure the group exists
+	exists, err := g.groupExists(ctx, groupID)
+	if err != nil {
+		log.Printf("Error checking group existence for channel metadata: %v", err)
+		return true, "internal error checking group"
+	}
+	if !exists {
+		return true, "group does not exist"
+	}
+
+	// Only members can modify channel metadata
+	isMember, err := g.IsMember(ctx, event.PubKey, groupID)
+	if err != nil {
+		log.Printf("Error checking member status for channel metadata: %v", err)
+		return true, "internal error checking membership"
+	}
+	if !isMember {
+		return true, "only group members can edit channel metadata"
+	}
+
+	// Require an e tag that points to the channel's create event (kind 40)
+	channelID := getFirstETag(event)
+	if channelID == "" {
+		return true, "missing e tag (channel event id)"
+	}
+
+	// Optionally verify the channel event exists and belongs to the same group
+	if ok, err := g.channelBelongsToGroup(ctx, channelID, groupID); err != nil {
+		log.Printf("Error verifying channel %s belongs to group %s: %v", channelID, groupID, err)
+		return true, "internal error verifying channel"
+	} else if !ok {
+		return true, "channel does not belong to this group"
+	}
+
+	// Validate that content, if present, is valid JSON per NIP-28
+	if event.Content != "" {
+		var meta struct {
+			Name    string   `json:"name,omitempty"`
+			About   string   `json:"about,omitempty"`
+			Picture string   `json:"picture,omitempty"`
+			Relays  []string `json:"relays,omitempty"`
+		}
+		if err := json.Unmarshal([]byte(event.Content), &meta); err != nil {
+			return true, "invalid channel metadata content (must be JSON)"
+		}
+	}
+
+	return false, ""
+}
+
 // validateProfile validates kind 0 profile events for username uniqueness
 // The username is taken from the "u" tag and must be unique across all users
 func (g *GroupsService) validateProfile(ctx context.Context, event *nostr.Event) (bool, string) {
@@ -418,6 +534,10 @@ func (g *GroupsService) OnEventSaved(ctx context.Context, event *nostr.Event) {
 		g.handleMetadataEdited(ctx, event)
 	case KindLeaveRequest:
 		g.handleUserLeft(ctx, event)
+	case KindChannelCreate:
+		g.handleChannelCreated(ctx, event)
+	case KindChannelMetadata:
+		g.handleChannelMetadataUpdated(ctx, event)
 	}
 }
 
@@ -550,6 +670,127 @@ func (g *GroupsService) handleMetadataEdited(ctx context.Context, event *nostr.E
 	g.generateGroupMetadata(ctx, groupID, event)
 }
 
+// handleChannelCreated processes a new NIP-28 channel creation event (kind 40) scoped to a group.
+// It updates the relay-generated group channels metadata snapshot for the corresponding group.
+func (g *GroupsService) handleChannelCreated(ctx context.Context, event *nostr.Event) {
+	groupID := getHTag(event)
+	if groupID == "" {
+		return
+	}
+
+	log.Printf("Channel %s created in group %s by %s", event.ID[:8], groupID, event.PubKey[:8])
+
+	// Parse basic channel metadata from event content (NIP-28)
+	var content struct {
+		Name    string   `json:"name,omitempty"`
+		About   string   `json:"about,omitempty"`
+		Picture string   `json:"picture,omitempty"`
+		Relays  []string `json:"relays,omitempty"`
+	}
+	if event.Content != "" {
+		if err := json.Unmarshal([]byte(event.Content), &content); err != nil {
+			log.Printf("Error parsing channel metadata content for channel %s: %v", event.ID[:8], err)
+		}
+	}
+
+	channel := ChannelMetadata{
+		ID:      event.ID,
+		Name:    content.Name,
+		About:   content.About,
+		Picture: content.Picture,
+		Relays:  content.Relays,
+		Creator: event.PubKey,
+	}
+
+	meta, err := g.getGroupChannelsMetadata(ctx, groupID)
+	if err != nil {
+		log.Printf("Error loading group channels metadata for group %s: %v", groupID, err)
+		return
+	}
+
+	// Update existing channel entry if present, otherwise append
+	updated := false
+	for i, ch := range meta.Channels {
+		if ch.ID == channel.ID {
+			meta.Channels[i].Name = channel.Name
+			meta.Channels[i].About = channel.About
+			meta.Channels[i].Picture = channel.Picture
+			meta.Channels[i].Relays = channel.Relays
+			// Preserve existing Creator if already set
+			if meta.Channels[i].Creator == "" {
+				meta.Channels[i].Creator = channel.Creator
+			}
+			updated = true
+			break
+		}
+	}
+	if !updated {
+		meta.Channels = append(meta.Channels, channel)
+	}
+
+	g.generateGroupChannelsEvent(ctx, groupID, meta)
+}
+
+// handleChannelMetadataUpdated processes a NIP-28 channel metadata event (kind 41) scoped to a group.
+// It updates the relay-generated group channels metadata snapshot for the corresponding group.
+func (g *GroupsService) handleChannelMetadataUpdated(ctx context.Context, event *nostr.Event) {
+	groupID := getHTag(event)
+	if groupID == "" {
+		return
+	}
+
+	channelID := getFirstETag(event)
+	if channelID == "" {
+		return
+	}
+
+	log.Printf("Channel %s metadata updated in group %s by %s", channelID[:8], groupID, event.PubKey[:8])
+
+	// Parse updated channel metadata from event content (NIP-28)
+	var content struct {
+		Name    string   `json:"name,omitempty"`
+		About   string   `json:"about,omitempty"`
+		Picture string   `json:"picture,omitempty"`
+		Relays  []string `json:"relays,omitempty"`
+	}
+	if event.Content != "" {
+		if err := json.Unmarshal([]byte(event.Content), &content); err != nil {
+			log.Printf("Error parsing channel metadata update content for channel %s: %v", channelID[:8], err)
+		}
+	}
+
+	meta, err := g.getGroupChannelsMetadata(ctx, groupID)
+	if err != nil {
+		log.Printf("Error loading group channels metadata for group %s: %v", groupID, err)
+		return
+	}
+
+	// Update existing channel entry if present
+	for i, ch := range meta.Channels {
+		if ch.ID == channelID {
+			meta.Channels[i].Name = content.Name
+			meta.Channels[i].About = content.About
+			meta.Channels[i].Picture = content.Picture
+			meta.Channels[i].Relays = content.Relays
+			g.generateGroupChannelsEvent(ctx, groupID, meta)
+			return
+		}
+	}
+
+	// If the channel is not present yet (e.g. created elsewhere), add a new entry
+	newChannel := ChannelMetadata{
+		ID:      channelID,
+		Name:    content.Name,
+		About:   content.About,
+		Picture: content.Picture,
+		Relays:  content.Relays,
+		// Creator may be unknown here; leave empty
+	}
+	meta.Channels = append(meta.Channels, newChannel)
+
+	g.generateGroupChannelsEvent(ctx, groupID, meta)
+}
+
 // deleteOldMetadataEvent removes existing events of the given kind for a group, excluding a specific event ID
 func (g *GroupsService) deleteOldMetadataEvent(ctx context.Context, kind int, groupID string, excludeEventID string) {
 	// Check both "d" and "h" tags to catch any legacy events
@@ -575,6 +816,31 @@ func (g *GroupsService) deleteOldMetadataEvent(ctx context.Context, kind int, gr
 			}
 		}
 	}
+}
+
+// channelBelongsToGroup verifies that a channel (kind 40) event exists and is associated with the given group ID.
+func (g *GroupsService) channelBelongsToGroup(ctx context.Context, channelID, groupID string) (bool, error) {
+	filter := nostr.Filter{
+		IDs:   []string{channelID},
+		Limit: 1,
+	}
+
+	eventsCh, err := g.eventStore.QueryEvents(ctx, filter)
+	if err != nil {
+		return false, err
+	}
+
+	for evt := range eventsCh {
+		if evt.Kind != KindChannelCreate {
+			continue
+		}
+		// Check the h tag on the channel create event
+		if getHTag(evt) == groupID {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 // generateGroupMetadata creates/updates a kind 39000 group metadata event
@@ -1034,6 +1300,15 @@ func getFirstPTag(event *nostr.Event) string {
 	return ""
 }
 
+// getFirstETag extracts the first e tag value (used for channel metadata referencing the channel event).
+func getFirstETag(event *nostr.Event) string {
+	tag := event.Tags.GetFirst([]string{"e", ""})
+	if tag != nil && len(*tag) >= 2 {
+		return (*tag)[1]
+	}
+	return ""
+}
+
 // getPTags returns all p tag values with their optional role
 // Returns slice of [pubkey, role?]
 func getPTags(event *nostr.Event) [][]string {
@@ -1092,30 +1367,35 @@ func (g *GroupsService) GetGroupMetadata(ctx context.Context, groupID string) (*
 		return nil, err
 	}
 
-	for evt := range events {
-		meta := &GroupMetadata{
-			ID:      groupID,
-			Closed:  true, // All our groups are closed
-			Private: true,
-		}
-
-		for _, tag := range evt.Tags {
-			if len(tag) >= 2 {
-				switch tag[0] {
-				case "name":
-					meta.Name = tag[1]
-				case "about":
-					meta.About = tag[1]
-				case "picture":
-					meta.Picture = tag[1]
-				}
-			}
-		}
-
-		return meta, nil
+	var evt *nostr.Event
+	for e := range events {
+		evt = e
+		break
+	}
+	if evt == nil {
+		return nil, fmt.Errorf("group not found")
 	}
 
-	return nil, fmt.Errorf("group not found")
+	meta := &GroupMetadata{
+		ID:      groupID,
+		Closed:  true, // All our groups are closed
+		Private: true,
+	}
+
+	for _, tag := range evt.Tags {
+		if len(tag) >= 2 {
+			switch tag[0] {
+			case "name":
+				meta.Name = tag[1]
+			case "about":
+				meta.About = tag[1]
+			case "picture":
+				meta.Picture = tag[1]
+			}
+		}
+	}
+
+	return meta, nil
 }
 
 // SerializeMetadata serializes group metadata to JSON
@@ -1125,4 +1405,127 @@ func (m *GroupMetadata) SerializeMetadata() (string, error) {
 		return "", err
 	}
 	return string(data), nil
+}
+
+// ChannelMetadata represents metadata for a single channel within a group.
+type ChannelMetadata struct {
+	ID      string   `json:"id"`
+	Name    string   `json:"name,omitempty"`
+	About   string   `json:"about,omitempty"`
+	Picture string   `json:"picture,omitempty"`
+	Relays  []string `json:"relays,omitempty"`
+	Creator string   `json:"creator,omitempty"`
+}
+
+// GroupChannelsMetadata represents all channels for a given group.
+type GroupChannelsMetadata struct {
+	GroupID  string            `json:"group_id"`
+	Channels []ChannelMetadata `json:"channels"`
+}
+
+// Serialize serializes group channels metadata to JSON.
+func (m *GroupChannelsMetadata) Serialize() (string, error) {
+	data, err := json.Marshal(m)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// DeserializeGroupChannelsMetadata deserializes group channels metadata from JSON.
+func DeserializeGroupChannelsMetadata(content string) (*GroupChannelsMetadata, error) {
+	if content == "" {
+		return &GroupChannelsMetadata{}, nil
+	}
+
+	var meta GroupChannelsMetadata
+	if err := json.Unmarshal([]byte(content), &meta); err != nil {
+		return nil, err
+	}
+	return &meta, nil
+}
+
+// GetGroupChannels retrieves channel metadata for a group.
+func (g *GroupsService) GetGroupChannels(ctx context.Context, groupID string) (*GroupChannelsMetadata, error) {
+	return g.getGroupChannelsMetadata(ctx, groupID)
+}
+
+// getGroupChannelsMetadata loads the latest relay-generated channels metadata event for a group.
+func (g *GroupsService) getGroupChannelsMetadata(ctx context.Context, groupID string) (*GroupChannelsMetadata, error) {
+	filter := nostr.Filter{
+		Kinds:   []int{KindGroupChannels},
+		Authors: []string{g.relayPubkey},
+		Tags:    nostr.TagMap{"d": []string{groupID}},
+		Limit:   1,
+	}
+
+	events, err := g.eventStore.QueryEvents(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	var evt *nostr.Event
+	for e := range events {
+		evt = e
+		break
+	}
+
+	if evt == nil {
+		// No metadata yet, return an empty structure
+		return &GroupChannelsMetadata{
+			GroupID:  groupID,
+			Channels: []ChannelMetadata{},
+		}, nil
+	}
+
+	meta, err := DeserializeGroupChannelsMetadata(evt.Content)
+	if err != nil {
+		return nil, err
+	}
+	if meta.GroupID == "" {
+		meta.GroupID = groupID
+	}
+	return meta, nil
+}
+
+// generateGroupChannelsEvent creates/updates a KindGroupChannels event for a group.
+func (g *GroupsService) generateGroupChannelsEvent(ctx context.Context, groupID string, meta *GroupChannelsMetadata) {
+	if meta == nil {
+		meta = &GroupChannelsMetadata{
+			GroupID:  groupID,
+			Channels: []ChannelMetadata{},
+		}
+	}
+	if meta.GroupID == "" {
+		meta.GroupID = groupID
+	}
+
+	content, err := meta.Serialize()
+	if err != nil {
+		log.Printf("Error serializing group channels metadata for group %s: %v", groupID, err)
+		return
+	}
+
+	event := &nostr.Event{
+		Kind:      KindGroupChannels,
+		PubKey:    g.relayPubkey,
+		CreatedAt: nostr.Timestamp(time.Now().Unix()),
+		Tags: nostr.Tags{
+			{"d", groupID},
+		},
+		Content: content,
+	}
+
+	if err := event.Sign(g.relaySecretKey); err != nil {
+		log.Printf("Error signing group channels event for group %s: %v", groupID, err)
+		return
+	}
+
+	if err := g.eventStore.SaveEvent(ctx, event); err != nil {
+		log.Printf("Error saving group channels event for group %s: %v", groupID, err)
+		return
+	}
+
+	// Delete old group channels metadata events after successful save
+	g.deleteOldMetadataEvent(ctx, KindGroupChannels, groupID, event.ID)
 }
