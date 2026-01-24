@@ -58,7 +58,34 @@ func (m *memoryStore) SaveEvent(ctx context.Context, ev *nostr.Event) error {
 }
 
 func (m *memoryStore) ReplaceEvent(ctx context.Context, ev *nostr.Event) error {
-	// For testing we don't need replace semantics beyond simple save.
+	// Implement simple replace semantics based on NIP-33-style \"d\" tag:
+	// for the same (kind, author, d) we keep only the newest event.
+	var dVal string
+	for _, tag := range ev.Tags {
+		if len(tag) >= 2 && tag[0] == "d" {
+			dVal = tag[1]
+			break
+		}
+	}
+
+	if dVal != "" {
+		for id, existing := range m.events {
+			if existing.Kind != ev.Kind || existing.PubKey != ev.PubKey {
+				continue
+			}
+			var existingD string
+			for _, t := range existing.Tags {
+				if len(t) >= 2 && t[0] == "d" {
+					existingD = t[1]
+					break
+				}
+			}
+			if existingD == dVal {
+				delete(m.events, id)
+			}
+		}
+	}
+
 	m.events[ev.ID] = ev
 	return nil
 }
