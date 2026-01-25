@@ -400,13 +400,38 @@ func (g *GroupsService) validateChannelCreate(ctx context.Context, event *nostr.
 	// Validate that content, if present, is valid JSON per NIP-28
 	if event.Content != "" {
 		var meta struct {
-			Name    string   `json:"name,omitempty"`
-			About   string   `json:"about,omitempty"`
-			Picture string   `json:"picture,omitempty"`
-			Relays  []string `json:"relays,omitempty"`
+			Name    string                 `json:"name,omitempty"`
+			About   string                 `json:"about,omitempty"`
+			Picture string                 `json:"picture,omitempty"`
+			Relays  []string               `json:"relays,omitempty"`
+			Extra   map[string]interface{} `json:"extra,omitempty"`
 		}
 		if err := json.Unmarshal([]byte(event.Content), &meta); err != nil {
 			return true, "invalid channel metadata content (must be JSON)"
+		}
+
+		// Check if admin-only fields (pinned, order) are being set in extra
+		if meta.Extra != nil {
+			hasPinned := false
+			hasOrder := false
+			if _, ok := meta.Extra["pinned"]; ok {
+				hasPinned = true
+			}
+			if _, ok := meta.Extra["order"]; ok {
+				hasOrder = true
+			}
+
+			// If admin-only fields are present, require admin permissions
+			if hasPinned || hasOrder {
+				isAdmin, err := g.IsAdmin(ctx, event.PubKey, groupID)
+				if err != nil {
+					log.Printf("Error checking admin status for channel creation: %v", err)
+					return true, "internal error checking permissions"
+				}
+				if !isAdmin {
+					return true, "only admins can set pinned or order fields"
+				}
+			}
 		}
 	}
 
@@ -458,13 +483,38 @@ func (g *GroupsService) validateChannelMetadata(ctx context.Context, event *nost
 	// Validate that content, if present, is valid JSON per NIP-28
 	if event.Content != "" {
 		var meta struct {
-			Name    string   `json:"name,omitempty"`
-			About   string   `json:"about,omitempty"`
-			Picture string   `json:"picture,omitempty"`
-			Relays  []string `json:"relays,omitempty"`
+			Name    string                 `json:"name,omitempty"`
+			About   string                 `json:"about,omitempty"`
+			Picture string                 `json:"picture,omitempty"`
+			Relays  []string               `json:"relays,omitempty"`
+			Extra   map[string]interface{} `json:"extra,omitempty"`
 		}
 		if err := json.Unmarshal([]byte(event.Content), &meta); err != nil {
 			return true, "invalid channel metadata content (must be JSON)"
+		}
+
+		// Check if admin-only fields (pinned, order) are being set in extra
+		if meta.Extra != nil {
+			hasPinned := false
+			hasOrder := false
+			if _, ok := meta.Extra["pinned"]; ok {
+				hasPinned = true
+			}
+			if _, ok := meta.Extra["order"]; ok {
+				hasOrder = true
+			}
+
+			// If admin-only fields are present, require admin permissions
+			if hasPinned || hasOrder {
+				isAdmin, err := g.IsAdmin(ctx, event.PubKey, groupID)
+				if err != nil {
+					log.Printf("Error checking admin status for channel metadata: %v", err)
+					return true, "internal error checking permissions"
+				}
+				if !isAdmin {
+					return true, "only admins can set pinned or order fields"
+				}
+			}
 		}
 	}
 
@@ -691,10 +741,11 @@ func (g *GroupsService) handleChannelCreated(ctx context.Context, event *nostr.E
 
 	// Parse basic channel metadata from event content (NIP-28)
 	var content struct {
-		Name    string   `json:"name,omitempty"`
-		About   string   `json:"about,omitempty"`
-		Picture string   `json:"picture,omitempty"`
-		Relays  []string `json:"relays,omitempty"`
+		Name    string                 `json:"name,omitempty"`
+		About   string                 `json:"about,omitempty"`
+		Picture string                 `json:"picture,omitempty"`
+		Relays  []string               `json:"relays,omitempty"`
+		Extra   map[string]interface{} `json:"extra,omitempty"`
 	}
 	if event.Content != "" {
 		if err := json.Unmarshal([]byte(event.Content), &content); err != nil {
@@ -710,6 +761,7 @@ func (g *GroupsService) handleChannelCreated(ctx context.Context, event *nostr.E
 		Picture: content.Picture,
 		Relays:  content.Relays,
 		Creator: event.PubKey,
+		Extra:   content.Extra,
 	}
 
 	g.generateChannelMetadataEvent(ctx, groupID, &channel)
@@ -741,10 +793,11 @@ func (g *GroupsService) handleChannelMetadataUpdated(ctx context.Context, event 
 
 	// Parse updated channel metadata from event content (NIP-28)
 	var content struct {
-		Name    string   `json:"name,omitempty"`
-		About   string   `json:"about,omitempty"`
-		Picture string   `json:"picture,omitempty"`
-		Relays  []string `json:"relays,omitempty"`
+		Name    string                 `json:"name,omitempty"`
+		About   string                 `json:"about,omitempty"`
+		Picture string                 `json:"picture,omitempty"`
+		Relays  []string               `json:"relays,omitempty"`
+		Extra   map[string]interface{} `json:"extra,omitempty"`
 	}
 	if event.Content != "" {
 		if err := json.Unmarshal([]byte(event.Content), &content); err != nil {
@@ -780,6 +833,24 @@ func (g *GroupsService) handleChannelMetadataUpdated(ctx context.Context, event 
 	// Preserve creator from existing metadata if available.
 	if existing != nil {
 		channel.Creator = existing.Creator
+		// Merge extra fields: start with existing, then overlay with new values
+		if existing.Extra != nil {
+			channel.Extra = make(map[string]interface{})
+			// Copy existing extra fields
+			for k, v := range existing.Extra {
+				channel.Extra[k] = v
+			}
+		}
+	}
+
+	// Overlay new extra fields if provided
+	if content.Extra != nil {
+		if channel.Extra == nil {
+			channel.Extra = make(map[string]interface{})
+		}
+		for k, v := range content.Extra {
+			channel.Extra[k] = v
+		}
 	}
 
 	g.generateChannelMetadataEvent(ctx, groupID, &channel)
@@ -1403,13 +1474,14 @@ func (m *GroupMetadata) SerializeMetadata() (string, error) {
 
 // ChannelMetadata represents metadata for a single channel within a group.
 type ChannelMetadata struct {
-	ID      string   `json:"id"`
-	GroupID string   `json:"group_id,omitempty"`
-	Name    string   `json:"name,omitempty"`
-	About   string   `json:"about,omitempty"`
-	Picture string   `json:"picture,omitempty"`
-	Relays  []string `json:"relays,omitempty"`
-	Creator string   `json:"creator,omitempty"`
+	ID      string                 `json:"id"`
+	GroupID string                 `json:"group_id,omitempty"`
+	Name    string                 `json:"name,omitempty"`
+	About   string                 `json:"about,omitempty"`
+	Picture string                 `json:"picture,omitempty"`
+	Relays  []string               `json:"relays,omitempty"`
+	Creator string                 `json:"creator,omitempty"`
+	Extra   map[string]interface{} `json:"extra,omitempty"`
 }
 
 // GroupChannelsMetadata represents all channels for a given group.
