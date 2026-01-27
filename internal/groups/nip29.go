@@ -115,6 +115,8 @@ func (g *GroupsService) ValidateEvent(ctx context.Context, event *nostr.Event) (
 		return g.validateDeleteEvent(ctx, event)
 	case KindDeleteGroup:
 		return g.validateDeleteGroup(ctx, event)
+	case KindCreateInvite:
+		return g.validateCreateInvite(ctx, event)
 	case KindJoinRequest:
 		return g.validateJoinRequest(ctx, event)
 	case KindLeaveRequest:
@@ -293,9 +295,37 @@ func (g *GroupsService) validateDeleteGroup(ctx context.Context, event *nostr.Ev
 	return false, ""
 }
 
+// validateCreateInvite validates creating an invite for a user
+// Only admins can create invites
+func (g *GroupsService) validateCreateInvite(ctx context.Context, event *nostr.Event) (bool, string) {
+	groupID := getHTag(event)
+	if groupID == "" {
+		return true, "missing h tag (group ID)"
+	}
+
+	// Check if the event author is an admin
+	isAdmin, err := g.IsAdmin(ctx, event.PubKey, groupID)
+	if err != nil {
+		log.Printf("Error checking admin status: %v", err)
+		return true, "internal error checking permissions"
+	}
+	if !isAdmin {
+		return true, "only admins can create invites"
+	}
+
+	// Validate that there's at least one p tag (target user)
+	pTags := getPTags(event)
+	if len(pTags) == 0 {
+		return true, "missing p tag (target user pubkey)"
+	}
+
+	return false, ""
+}
+
 // validateJoinRequest validates a request to join a group
 // For closed groups, join requests are stored but don't grant access
 // Admins must explicitly add users via put-user (kind 9000)
+// If a valid invite exists, the join request will be auto-approved in OnEventSaved
 func (g *GroupsService) validateJoinRequest(ctx context.Context, event *nostr.Event) (bool, string) {
 	groupID := getHTag(event)
 	if groupID == "" {
@@ -322,7 +352,14 @@ func (g *GroupsService) validateJoinRequest(ctx context.Context, event *nostr.Ev
 		return true, "duplicate: already a member of this group"
 	}
 
-	// Allow the join request to be stored (admins can see it and act on it)
+	// Check if there's a pending invite for this user
+	// If an invite exists, the join request will be auto-approved in OnEventSaved
+	// We don't need to validate the invite here, just allow the request to proceed
+	// The actual auto-approval happens in OnEventSaved
+
+	// Allow the join request to be stored
+	// If there's a valid invite, it will be auto-approved in OnEventSaved
+	// Otherwise, admins can see it and act on it manually
 	return false, ""
 }
 
@@ -582,6 +619,8 @@ func (g *GroupsService) OnEventSaved(ctx context.Context, event *nostr.Event) {
 		g.handleUserRemoved(ctx, event)
 	case KindEditMetadata:
 		g.handleMetadataEdited(ctx, event)
+	case KindJoinRequest:
+		g.handleJoinRequest(ctx, event)
 	case KindLeaveRequest:
 		g.handleUserLeft(ctx, event)
 	case KindChannelCreate:
@@ -668,6 +707,51 @@ func (g *GroupsService) handleUserRemoved(ctx context.Context, event *nostr.Even
 		members = removeFromSlice(members, targetPubkey)
 		g.generateMembersList(ctx, groupID, members)
 	}
+}
+
+// handleJoinRequest processes when a user requests to join a group
+// If there's a valid invite, automatically approve the request
+func (g *GroupsService) handleJoinRequest(ctx context.Context, event *nostr.Event) {
+	groupID := getHTag(event)
+	if groupID == "" {
+		return
+	}
+
+	// Check if there's a pending invite for this user
+	invite := g.findPendingInvite(ctx, event.PubKey, groupID)
+	if invite == nil {
+		// No invite found, just log the request for manual admin review
+		log.Printf("Join request from %s to group %s (no invite, requires manual approval)", event.PubKey[:8], groupID)
+		return
+	}
+
+	// Valid invite found, auto-approve by generating a put-user event
+	log.Printf("Auto-approving join request from %s to group %s (invite found)", event.PubKey[:8], groupID)
+
+	// Generate kind 9000 (put-user) event signed by relay
+	putUserEvent := &nostr.Event{
+		Kind:      KindPutUser,
+		PubKey:    g.relayPubkey,
+		CreatedAt: nostr.Timestamp(time.Now().Unix()),
+		Tags: nostr.Tags{
+			{"h", groupID},
+			{"p", event.PubKey, RoleMember},
+		},
+		Content: "user accepted invite",
+	}
+
+	if err := putUserEvent.Sign(g.relaySecretKey); err != nil {
+		log.Printf("Error signing put-user event for invite acceptance: %v", err)
+		return
+	}
+
+	if err := g.eventStore.SaveEvent(ctx, putUserEvent); err != nil {
+		log.Printf("Error saving put-user event for invite acceptance: %v", err)
+		return
+	}
+
+	// handleUserAdded will be triggered by OnEventSaved for the 9000 event
+	// which will update the 39001 (admins) and 39002 (members) lists
 }
 
 // handleUserLeft processes when a user voluntarily leaves a group
@@ -1242,6 +1326,47 @@ func (g *GroupsService) checkNotRemoved(ctx context.Context, pubkey, groupID str
 	}
 
 	return true, nil
+}
+
+// findPendingInvite finds a valid pending invite for a user in a group
+// Returns the invite event if found, nil otherwise
+func (g *GroupsService) findPendingInvite(ctx context.Context, userPubkey, groupID string) *nostr.Event {
+	// First check if user is already a member - if so, no invite is valid
+	isMember, err := g.IsMember(ctx, userPubkey, groupID)
+	if err != nil {
+		log.Printf("Error checking member status for invite validation: %v", err)
+		return nil
+	}
+	if isMember {
+		// User is already a member, invite was used or not needed
+		return nil
+	}
+
+	// Query for kind:9009 invite events with matching group ID and user pubkey
+	inviteFilter := nostr.Filter{
+		Kinds: []int{KindCreateInvite},
+		Tags: nostr.TagMap{
+			"h": []string{groupID},
+			"p": []string{userPubkey},
+		},
+		Limit: 100, // Get all invites for this user in this group
+	}
+
+	events, err := g.eventStore.QueryEvents(ctx, inviteFilter)
+	if err != nil {
+		log.Printf("Error querying for invites: %v", err)
+		return nil
+	}
+
+	// Find the most recent invite (all are valid since user is not a member)
+	var latestInvite *nostr.Event
+	for evt := range events {
+		if latestInvite == nil || evt.CreatedAt > latestInvite.CreatedAt {
+			latestInvite = evt
+		}
+	}
+
+	return latestInvite
 }
 
 // groupExists checks if a group exists
