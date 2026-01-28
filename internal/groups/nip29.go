@@ -1329,7 +1329,8 @@ func (g *GroupsService) checkNotRemoved(ctx context.Context, pubkey, groupID str
 }
 
 // findPendingInvite finds a valid pending invite for a user in a group
-// Returns the invite event if found, nil otherwise
+// Returns the most recent invite event if found, nil otherwise
+// Multiple invites for the same (group, user) pair replace each other - only the latest is valid
 func (g *GroupsService) findPendingInvite(ctx context.Context, userPubkey, groupID string) *nostr.Event {
 	// First check if user is already a member - if so, no invite is valid
 	isMember, err := g.IsMember(ctx, userPubkey, groupID)
@@ -1358,12 +1359,32 @@ func (g *GroupsService) findPendingInvite(ctx context.Context, userPubkey, group
 		return nil
 	}
 
-	// Find the most recent invite (all are valid since user is not a member)
-	var latestInvite *nostr.Event
+	// Collect all invites and explicitly replace older ones with newer ones
+	// Multiple invites for the same (group, user) pair: only the latest is valid
+	var allInvites []*nostr.Event
 	for evt := range events {
-		if latestInvite == nil || evt.CreatedAt > latestInvite.CreatedAt {
+		allInvites = append(allInvites, evt)
+	}
+
+	if len(allInvites) == 0 {
+		return nil
+	}
+
+	// Find the most recent invite by created_at timestamp
+	// Newer invites explicitly replace older ones - older invites are invalid
+	var latestInvite *nostr.Event
+	var latestTimestamp nostr.Timestamp
+	for _, evt := range allInvites {
+		if latestInvite == nil || evt.CreatedAt > latestTimestamp {
 			latestInvite = evt
+			latestTimestamp = evt.CreatedAt
 		}
+	}
+
+	// Log if there were multiple invites (replacement occurred)
+	if len(allInvites) > 1 {
+		log.Printf("Found %d invites for user %s in group %s, using latest (created_at: %d)",
+			len(allInvites), userPubkey[:8], groupID, latestTimestamp)
 	}
 
 	return latestInvite
