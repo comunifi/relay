@@ -20,10 +20,11 @@ __debug_bin*
 data/
 
 # env
-.env
 
 .DS_Store
 
 firebase.json
 
 .relay/
+config.bat
+node_modules

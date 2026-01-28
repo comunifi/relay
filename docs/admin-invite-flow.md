@@ -49,6 +49,13 @@ Admins can create invites for specific users. This event must be signed by an ad
 - `h` tag (group ID) must be present
 - At least one `p` tag (target user) must be present
 
+**Invite Replacement:**
+- Multiple invites for the same group and user **explicitly replace** each other
+- Only the most recent invite (by `created_at`) is considered valid
+- Older invites are **invalidated** when a new one is created
+- The relay explicitly filters out older invites and only processes the latest one
+- When multiple invites exist, the relay logs the replacement and uses only the newest
+
 ### `kind:9021` - Join Request (User)
 
 Users send this to request joining a group. If a valid invite exists, the relay will automatically approve it.
@@ -131,9 +138,21 @@ const inviteFilter = {
 
 const invites = await relay.query(inviteFilter)
 
-// Display invites to user
+// Group invites by group ID and keep only the latest per group
+// (since newer invites replace older ones)
+const invitesByGroup = new Map()
 for (const invite of invites) {
   const groupID = invite.tags.find(t => t[0] === 'h')?.[1]
+  if (!groupID) continue
+  
+  const existing = invitesByGroup.get(groupID)
+  if (!existing || invite.created_at > existing.created_at) {
+    invitesByGroup.set(groupID, invite)
+  }
+}
+
+// Display latest invite per group to user
+for (const [groupID, invite] of invitesByGroup) {
   const inviterPubkey = invite.pubkey
   console.log(`Invited to group ${groupID} by ${inviterPubkey}`)
 }
@@ -148,6 +167,11 @@ const inviteFilter = {
   "#p": [userPubkey],
   limit: 100
 }
+
+const invites = await relay.query(inviteFilter)
+
+// Get the most recent invite (newer invites replace older ones)
+const latestInvite = invites.sort((a, b) => b.created_at - a.created_at)[0]
 ```
 
 ### 3. User: Accepting an Invite
@@ -293,7 +317,7 @@ If a user tries to use an invite after already becoming a member:
 2. **UI Feedback:** Show users when their join request is auto-approved vs. pending
 3. **Error Messages:** Display clear error messages when invite creation or acceptance fails
 4. **Event References:** While optional, including the `e` tag in join requests can help with tracking and debugging
-5. **Multiple Invites:** If multiple invites exist, the relay uses the most recent one
+5. **Multiple Invites:** Multiple invites for the same (group, user) pair replace each other - only the most recent invite is valid. When displaying invites to users, you may want to show only the latest invite per group.
 
 ---
 
