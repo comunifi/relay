@@ -70,17 +70,41 @@ const (
 // GroupsService handles NIP-29 group enforcement
 type GroupsService struct {
 	eventStore     eventstore.Store
+	relay          *khatru.Relay
 	relayPubkey    string
 	relaySecretKey string
 }
 
 // NewGroupsService creates a new groups service
-func NewGroupsService(eventStore eventstore.Store, relayPubkey, relaySecretKey string) *GroupsService {
+func NewGroupsService(eventStore eventstore.Store, relay *khatru.Relay, relayPubkey, relaySecretKey string) *GroupsService {
 	return &GroupsService{
 		eventStore:     eventStore,
+		relay:          relay,
 		relayPubkey:    relayPubkey,
 		relaySecretKey: relaySecretKey,
 	}
+}
+
+// saveAndBroadcastEvent saves an event through khatru's hooks and broadcasts to subscribers.
+func (g *GroupsService) saveAndBroadcastEvent(ctx context.Context, event *nostr.Event) error {
+	for _, store := range g.relay.StoreEvent {
+		if err := store(ctx, event); err != nil {
+			return err
+		}
+	}
+	g.relay.BroadcastEvent(event)
+	return nil
+}
+
+// replaceAndBroadcastEvent replaces an event and broadcasts to subscribers.
+func (g *GroupsService) replaceAndBroadcastEvent(ctx context.Context, event *nostr.Event) error {
+	for _, replace := range g.relay.ReplaceEvent {
+		if err := replace(ctx, event); err != nil {
+			return err
+		}
+	}
+	g.relay.BroadcastEvent(event)
+	return nil
 }
 
 // AddHooks registers NIP-29 enforcement hooks on the relay
@@ -745,13 +769,14 @@ func (g *GroupsService) handleJoinRequest(ctx context.Context, event *nostr.Even
 		return
 	}
 
-	if err := g.eventStore.SaveEvent(ctx, putUserEvent); err != nil {
+	if err := g.saveAndBroadcastEvent(ctx, putUserEvent); err != nil {
 		log.Printf("Error saving put-user event for invite acceptance: %v", err)
 		return
 	}
 
-	// handleUserAdded will be triggered by OnEventSaved for the 9000 event
-	// which will update the 39001 (admins) and 39002 (members) lists
+	// Trigger OnEventSaved manually since we bypassed the normal khatru flow
+	// This will update the 39001 (admins) and 39002 (members) lists
+	g.OnEventSaved(ctx, putUserEvent)
 }
 
 // handleUserLeft processes when a user voluntarily leaves a group
@@ -782,13 +807,14 @@ func (g *GroupsService) handleUserLeft(ctx context.Context, event *nostr.Event) 
 		return
 	}
 
-	if err := g.eventStore.SaveEvent(ctx, removeEvent); err != nil {
+	if err := g.saveAndBroadcastEvent(ctx, removeEvent); err != nil {
 		log.Printf("Error saving remove-user event for leave request: %v", err)
 		return
 	}
 
-	// handleUserRemoved will be triggered by OnEventSaved for the 9001 event
-	// which will update the 39001 (admins) and 39002 (members) lists
+	// Trigger OnEventSaved manually since we bypassed the normal khatru flow
+	// This will update the 39001 (admins) and 39002 (members) lists
+	g.OnEventSaved(ctx, removeEvent)
 }
 
 // handleMetadataEdited processes when group metadata is edited
@@ -1079,7 +1105,7 @@ func (g *GroupsService) generateGroupMetadata(ctx context.Context, groupID strin
 		return
 	}
 
-	if err := g.eventStore.SaveEvent(ctx, metadata); err != nil {
+	if err := g.saveAndBroadcastEvent(ctx, metadata); err != nil {
 		log.Printf("Error saving group metadata event: %v", err)
 		return
 	}
@@ -1111,7 +1137,7 @@ func (g *GroupsService) generateAdminsList(ctx context.Context, groupID string, 
 		return
 	}
 
-	if err := g.eventStore.SaveEvent(ctx, event); err != nil {
+	if err := g.saveAndBroadcastEvent(ctx, event); err != nil {
 		log.Printf("Error saving admins list event: %v", err)
 		return
 	}
@@ -1143,7 +1169,7 @@ func (g *GroupsService) generateMembersList(ctx context.Context, groupID string,
 		return
 	}
 
-	if err := g.eventStore.SaveEvent(ctx, event); err != nil {
+	if err := g.saveAndBroadcastEvent(ctx, event); err != nil {
 		log.Printf("Error saving members list event: %v", err)
 		return
 	}
@@ -1740,7 +1766,7 @@ func (g *GroupsService) generateChannelMetadataEvent(ctx context.Context, groupI
 	}
 
 	// Use ReplaceEvent so there is exactly one metadata event per (groupID, channelID).
-	if err := g.eventStore.ReplaceEvent(ctx, event); err != nil {
+	if err := g.replaceAndBroadcastEvent(ctx, event); err != nil {
 		log.Printf("Error saving channel metadata event for group %s, channel %s: %v", groupID, channel.ID[:8], err)
 		return
 	}

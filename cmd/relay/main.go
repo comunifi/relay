@@ -104,7 +104,7 @@ func main() {
 	// NIP-29 Groups enforcement
 	log.Default().Println("initializing NIP-29 groups enforcement...")
 
-	groupsService := groups.NewGroupsService(&db, pubkey, conf.RelayPrivateKey)
+	groupsService := groups.NewGroupsService(&db, relay, pubkey, conf.RelayPrivateKey)
 	groupsService.AddHooks(relay)
 
 	log.Default().Println("NIP-29 groups enforcement initialized (closed groups with admin/member roles)")
