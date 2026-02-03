@@ -20,7 +20,7 @@ docker-compose --env-file .env.local up db
 go run cmd/main.go -env .env.local
 
 # Or run the lightweight Nostr-only relay (port 3334)
-go run cmd/relay/main.go -env ../.env.local
+go run cmd/relay/main.go -env .env.local 
 ```
 
 ### Fresh Database Setup
