@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/fiatjaf/eventstore"
+	"github.com/fiatjaf/khatru"
 	"github.com/nbd-wtf/go-nostr"
 )
 
@@ -168,6 +169,11 @@ func setupTestGroupsService(t *testing.T) (*GroupsService, *memoryStore) {
 
 	store := newMemoryStore()
 
+	// Create a khatru.Relay with memory store hooks for testing
+	relay := khatru.NewRelay()
+	relay.StoreEvent = append(relay.StoreEvent, store.SaveEvent)
+	relay.ReplaceEvent = append(relay.ReplaceEvent, store.ReplaceEvent)
+
 	secret := nostr.GeneratePrivateKey()
 	if secret == "" {
 		t.Fatalf("failed to generate private key")
@@ -178,7 +184,7 @@ func setupTestGroupsService(t *testing.T) (*GroupsService, *memoryStore) {
 		t.Fatalf("failed to derive public key: %v", err)
 	}
 
-	service := NewGroupsService(store, pub, secret)
+	service := NewGroupsService(store, relay, pub, secret)
 	return service, store
 }
 
